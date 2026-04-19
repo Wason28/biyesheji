@@ -1,0 +1,23 @@
+decision:
+  llm_provider: minimax
+  llm_model: MiniMax-M2.1
+  llm_api_key: ""
+  max_iterations: 10
+
+perception:
+  vlm_provider: minimax_mcp_vision
+  vlm_model: minimax-mcp-vision-latest
+  vlm_api_key: ""
+
+execution:
+  vla_model_path: ./models/smolvla_finetuned
+  robot_config: ./lerobot_configs/my_robot.yaml
+  workspace_limits:
+    x: [-0.5, 0.5]
+    y: [-0.5, 0.5]
+    z: [0.0, 0.8]
+
+frontend:
+  port: 7860
+  max_iterations: 10
+  speed_scale: 1.0
