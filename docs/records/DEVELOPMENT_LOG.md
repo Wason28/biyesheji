@@ -9,6 +9,89 @@
 ### 2026-04-20
 
 - 负责 Agent：Documentation Agent
+- 对应里程碑：第三阶段前端消费补强后的第三轮文档再次同步
+- 修改模块：`frontend/src/store/workbench.ts` / `frontend/src/components/config-panel.tsx` / `frontend/src/components/control-panel.tsx` / `frontend/src/components/event-panel.tsx` / `frontend/src/lib/api.ts` / `docs/records/CURRENT_STATUS.md` / `docs/records/DEVELOPMENT_LOG.md` / `docs/records/HANDOFF.md` / `docs/SESSION_START.md` / `README.md` / `docs/README.md`
+- 修改内容：基于当前仓库前端现状重新核对第三阶段事实；确认 `config-panel.tsx` 已采用“优先读取 GET /config，失败时回退 `bootstrap.config`”的双来源消费方式，`control-panel.tsx` 已在初始化失败时提供“重试初始化”入口，`workbench.ts` 已在 run 受理后先调用 `snapshot_url` 主动同步一次快照，并在 SSE `onerror` 时再次触发 `snapshot_url` 兜底同步；同时保持 `EventPanel` 对 `snapshot_url / events_url` 的显式展示与 `version` 去重语义不变。基于这些新增事实，再次统一 `CURRENT_STATUS`、`DEVELOPMENT_LOG`、`HANDOFF`、`SESSION_START`、`README` 与 `docs/README` 的表述，明确当前状态是“前端消费边界补强并保持构建通过”，而不是“浏览器联调或端到端闭环已完成”
+- 对应需求点：第三阶段文档要求在前端消费合同发生收敛时立即回写状态、交接和仓库导航；本轮重点是把 config 消费、`snapshot_url` 兜底同步、初始化重试和构建通过写成稳定事实，避免接手者继续沿用“仅有骨架、缺少兜底”的旧口径
+- 风险和遗留问题：本轮只做文档同步，不新增业务代码或测试；当前前端虽已具备更完整的读取与兜底逻辑，但仍无浏览器级联调记录、自动化前端测试和截图证据；后端仍是同步 WSGI + 进程内 `RunRegistry` 骨架，不能据此表述为生产级流式服务
+- 下一步建议：优先启动后端与前端开发服务器，按 `docs/specs/07-frontend-spec.md` 记录初始化成功/失败重试、run 提交、`snapshot_url` 同步、终态收口、事件断开与失败回显；一旦产生联调证据，再同步更新 `TEST_REPORT.md`、`FIGURE_ASSETS.md` 与 `THESIS_PROGRESS.md`
+- 对应论文章节：前端交互设计、前后端接口设计、系统实现与验证、工程化与交接规范
+
+- 负责 Agent：Documentation Agent
+- 对应里程碑：第三阶段前端工程骨架落地后的第三轮文档同步
+- 修改模块：`frontend/` 代码现状审查 / `docs/records/CURRENT_STATUS.md` / `docs/records/DEVELOPMENT_LOG.md` / `docs/records/HANDOFF.md` / `docs/records/MILESTONES.md` / `docs/SESSION_START.md` / `README.md` / `docs/README.md`
+- 修改内容：基于当前仓库已存在的 `frontend/` 工程重新核对第三阶段事实；确认前端已采用 `React 19 + TypeScript + Vite + Zustand` 落地工作台骨架，`App.tsx` 已组合任务输入、配置展示、运行态快照、事件订阅和工具面板五块区域，`workbench.ts` 已统一管理 bootstrap 加载、run 提交、SSE 订阅、事件去重与断开，`api.ts`/`sse.ts` 已对接 `bootstrap / tools / runs / events` 合同；执行 `npm run build` 后通过，产出 `dist/`，据此把 records、接手入口和仓库导航统一更新到“前端骨架已落地并构建通过，但仍是最小联调基线”的口径
+- 对应需求点：第三阶段主线要求完成前端界面开发与 MCP 工具集成；按第三轮文档要求，在前端工程骨架落地后必须立即同步 `CURRENT_STATUS`、`DEVELOPMENT_LOG`、`HANDOFF`、`MILESTONES`、`SESSION_START`、`README` 与 `docs/README`，并显式区分“构建通过”与“真实浏览器联调完成”
+- 风险和遗留问题：当前前端仅完成静态构建验证，尚无浏览器级联调记录、自动化前端测试或截图证据；后端仍为同步 WSGI + 进程内 `RunRegistry` 骨架，不能将当前状态表述为生产级流式服务或完整前后端闭环
+- 下一步建议：先启动后端与前端开发服务器，按 `docs/specs/07-frontend-spec.md` 的 9 项最小验收清单补初始化、run 提交、终态收口、失败回显和事件断开场景的联调记录；如产生运行截图或浏览器验证证据，再同步更新 `TEST_REPORT.md`、`FIGURE_ASSETS.md` 与 `THESIS_PROGRESS.md`
+- 对应论文章节：前端交互设计、前后端接口设计、系统实现与验证、工程化与交接规范
+
+### 2026-04-20
+
+- 负责 Agent：Thesis Curator
+- 对应里程碑：第三阶段前端骨架推进前的论文/素材最小同步审查
+- 修改模块：`docs/records/THESIS_PROGRESS.md` / `docs/records/FIGURE_ASSETS.md` / `docs/records/DEVELOPMENT_LOG.md` / 仓库代码与测试证据复核
+- 修改内容：基于第三阶段已进入“前端骨架启动与第三轮文档交付准备”的当前状态，复核 `backend/contracts.py`、`backend/service.py`、`backend/http.py` 与 phase-3 backend tests，识别当前真正可同步到论文的最小内容仅包括“前端最小消费合同”“`run_id` 生命周期与 SSE 回放语义”“重复 `run_id` 与非负事件游标错误边界”三类事实；同步更新 `THESIS_PROGRESS.md` 与 `FIGURE_ASSETS.md`，明确哪些图表已具备文字/代码证据可先出图，哪些界面截图仍必须等待前端工程落地后采集
+- 对应需求点：第三轮文档要求中，凡是已影响论文事实材料的阶段推进，都必须评估并同步 `THESIS_PROGRESS` 与 `FIGURE_ASSETS`；第三阶段当前主线已切换到前端骨架，因此需要先冻结论文可写边界与素材待采清单，避免把“接口准备完成”误写成“前端实现完成”
+- 风险和遗留问题：当前仓库仍无前端工程目录，因而所有界面类素材仍不可采集；当前后端仅为最小 WSGI + 进程内 run registry 骨架，论文中只能将其表述为可联调基线，不能表述为生产级流式服务
+- 下一步建议：前端目录创建后，第一时间补采任务输入区、模型配置面板、工具面板、运行态快照区与错误态截图；在此之前，论文仅先写接口合同图、路由图与时序图，不扩写未落地的 UI 细节
+- 对应论文章节：系统架构设计、前后端接口设计、系统实现与验证、论文材料组织
+
+- 负责 Agent：Orchestrator
+- 对应里程碑：第三阶段下一批优先级重排（前端骨架与第三轮文档优先）
+- 修改模块：`docs/records/CURRENT_STATUS.md` / `docs/records/DEVELOPMENT_LOG.md` / `docs/records/HANDOFF.md` / `docs/specs/07-frontend-spec.md` / `docs/specs/09-documentation-handoff.md` / 仓库现状审查
+- 修改内容：基于“最小 HTTP 骨架、run 状态推送、`run_id` 生命周期已完成”的第三阶段现状，重新核对前端规范与文档交接规范，确认下一批不再以后端骨架扩写为先，而是切换为“前端工程骨架启动 + 第三轮文档同步”双 P0；同步把 records 中的优先级栈改写为前端骨架、文档交付、QA 联调清单、服务栈评估和 Ubuntu 命令链验证五个顺位，并明确当前只允许写文档、不改业务代码
+- 对应需求点：第三阶段主线目标是完成前端界面开发与 MCP 工具集成；在后端最小合同已具备的前提下，下一批必须优先补前端承接体与交接文档，避免实现顺序继续失衡
+- 风险和遗留问题：当前前端目录仍不存在，`docs/reference/INTERFACES.md` 仍缺失，前后端正式联调口径只能临时依赖 `07-frontend-spec.md`、backend tests 和 records；若后续前端落地后不持续补文档，会再次出现代码与交接事实脱节
+- 下一步建议：先由 Frontend Agent 交付可消费 `bootstrap / config / tools / run / runs / events` 的工程骨架，再由 Documentation Agent 按 `09-documentation-handoff.md` 做第三轮同步；QA Agent 提前冻结联调验收清单，Backend Agent 仅保留服务栈评估，不抢占前端窗口
+- 对应论文章节：前端交互设计、系统架构设计、系统实现与验证、工程化与交接规范
+
+- 负责 Agent：Documentation Agent
+- 对应里程碑：第三阶段 run_id 生命周期、终态会话清理与事件游标约束同步
+- 修改模块：`src/embodied_agent/backend/run_registry.py` / `src/embodied_agent/backend/service.py` / `src/embodied_agent/backend/http.py` / `tests/test_backend_run_stream_phase3.py` / `tests/test_backend_http_phase3.py` / `docs/records/CURRENT_STATUS.md` / `docs/records/DEVELOPMENT_LOG.md` / `docs/records/HANDOFF.md` / `docs/records/MILESTONES.md` / `docs/records/TEST_REPORT.md`
+- 修改内容：基于最新代码改动重新核对第三阶段后端语义；确认 `FrontendRuntimeFacade.start_run` 已形成“创建 session -> 发布 version=1 的 running ack -> 启动 worker -> 发布终态快照”的最小 `run_id` 生命周期；确认 `RunRegistry.create_session` 会拒绝重复 `run_id`，`cleanup()` 已基于 `retention_seconds` 与 `max_terminal_sessions` 清理过期或超额终态会话，同时保留运行中 session；确认 `backend/http.py` 已对 `after_version` 与 `Last-Event-ID` 施加非负整数约束，并把重复 `run_id` 映射为 `409 RunAlreadyExists`；据此同步更新 records 与测试口径，并补跑 focused tests 为 `23 passed, 1 warning`、全量回归为 `67 passed, 1 warning`
+- 对应需求点：第三阶段最小后端合同不仅需要有 `runs / snapshot / events` 路由，还需要把 `run_id` 生命周期、终态会话回收与事件增量游标边界写成稳定可验证事实，避免前后端联调继续基于含糊语义推进
+- 风险和遗留问题：当前生命周期治理仍停留在进程内最小骨架；已实现的清理仅覆盖终态会话保留与容量淘汰，不覆盖运行中会话取消、服务重启恢复、多进程共享状态或持久化历史；HTTP 传输仍是同步 WSGI，不代表生产级流式链路已确定
+- 下一步建议：以当前 `run_id` 生命周期、终态清理和非负游标约束为基线冻结联调合同，再补异常线程退出观测、主动取消、长连接保活与持久化策略
+- 对应论文章节：系统架构设计、前后端接口设计、系统实现与验证、测试设计与结果分析
+
+- 负责 Agent：Documentation Agent
+- 对应里程碑：第三阶段 run 状态推送骨架落地同步
+- 修改模块：`src/embodied_agent/backend/contracts.py` / `src/embodied_agent/backend/service.py` / `src/embodied_agent/backend/http.py` / `src/embodied_agent/backend/run_registry.py` / `tests/test_backend_http_phase3.py` / `tests/test_backend_run_stream_phase3.py` / `docs/records/CURRENT_STATUS.md` / `docs/records/DEVELOPMENT_LOG.md` / `docs/records/HANDOFF.md` / `docs/records/MILESTONES.md` / `docs/records/TEST_REPORT.md`
+- 修改内容：基于最新代码改动核对第三阶段后端进展；确认 `FrontendRuntimeFacade` 已从同步 `run_instruction` 扩展到 `start_run / get_run / iter_run_events` 三段式运行态接口，新增 `FrontendRunAcceptedPayload` 与 `FrontendRunStatePayload` 合同；确认 `backend/run_registry.py` 已通过进程内 `RunRegistry` 维护 run session、事件版本与终态快照，`backend/http.py` 已新增 `POST /api/v1/runtime/runs`、`GET /api/v1/runtime/runs/{run_id}`、`GET /api/v1/runtime/runs/{run_id}/events`，并支持 `after_version` 与 `Last-Event-ID` 最小过滤；同时确认 `tests/test_backend_http_phase3.py` 已扩展到 15 个测试，新增 `tests/test_backend_run_stream_phase3.py` 3 个测试；本轮补跑 focused tests 为 `18 passed, 1 warning`，全量回归为 `62 passed, 1 warning`
+- 对应需求点：第三阶段需要把前端消费合同从“最小 HTTP 读/写骨架”继续推进到“具备 run_id、snapshot 查询与事件回放骨架的可验证后端接口”，为后续前端运行态展示与状态订阅接线提供稳定基线
+- 风险和遗留问题：当前 run 状态推送仍依赖 `RunRegistry + Thread + wsgiref` 的进程内骨架，只证明最小事件回放与状态快照链路成立，不证明长连接保活、断线重连、并发治理、会话清理、持久化恢复和生产级服务栈已经确定；此外当前环境仍无法直接使用 `uv`
+- 下一步建议：先冻结 `bootstrap / config / tools / run / runs / events / error` 的路径、方法、状态码、字段和错误码，再补重复 `run_id`、非法事件游标、异常线程退出和会话清理测试；前端工程启动后优先消费 `snapshot_url / events_url` 当前合同
+- 对应论文章节：系统架构设计、前后端接口设计、系统实现与验证、测试设计与结果分析
+
+- 负责 Agent：Documentation Agent
+- 对应里程碑：第三阶段最小 HTTP 接口骨架落地同步
+- 修改模块：`src/embodied_agent/backend/http.py` / `src/embodied_agent/backend/service.py` / `tests/test_backend_http_phase3.py` / `docs/records/CURRENT_STATUS.md` / `docs/records/DEVELOPMENT_LOG.md` / `docs/records/HANDOFF.md` / `docs/records/MILESTONES.md`
+- 修改内容：基于最新代码改动核对第三阶段后端进展；确认 `backend/http.py` 已新增基于标准库 `wsgiref` 的最小 WSGI HTTP 传输层，可从 runtime 或配置构建应用并提供 `GET /api/v1/runtime/bootstrap`、`GET /api/v1/runtime/config`、`GET /api/v1/runtime/tools`、`POST /api/v1/runtime/run` 四个最小接口；同时确认 `FrontendRuntimeFacade` 继续负责业务载荷拼装、错误载荷复用与缺省 `run_id` 生成；新增 `tests/test_backend_http_phase3.py` 后，全量测试从 44 个提升到 54 个通过
+- 对应需求点：第三阶段需要先把前端消费合同从“进程内 facade”推进到“可验证的最小 HTTP 对外骨架”，并显式冻结读接口、运行接口、标准错误返回与参数校验边界
+- 风险和遗留问题：当前 HTTP 层仍是同步 WSGI 骨架，不具备 SSE / WebSocket、运行态推送、持久化和生产级服务治理能力；长期是否继续沿用当前栈或迁移到更适合流式能力的框架仍待决策
+- 下一步建议：围绕现有 HTTP 路由继续冻结请求方法、路径、状态码与错误码；随后补 `run` 的流式状态推送方案、前端工程接线与真实服务联调记录
+- 对应论文章节：系统架构设计、前后端接口设计、系统实现与验证、测试设计与结果分析
+
+- 负责 Agent：Documentation Agent
+- 对应里程碑：第三阶段启动同步（后端接口层骨架已进入进行中）
+- 修改模块：`src/embodied_agent/app.py` / `src/embodied_agent/adapters/mcp_gateway.py` / `src/embodied_agent/backend/*` / `src/embodied_agent/shared/types.py` / `src/embodied_agent/shared/__init__.py` / `tests/test_app_phase1.py` / `docs/records/CURRENT_STATUS.md` / `docs/records/DEVELOPMENT_LOG.md` / `docs/records/HANDOFF.md` / `docs/records/MILESTONES.md`
+- 修改内容：基于当前工作树代码改动重新核对第三阶段启动口径；确认已新增独立 `backend` 模块承载 `contracts / presenters / service`，新增 `UnifiedMCPClient` 作为感知层与执行层的统一桥接器，并将 `app.py` 收口为组合根与 CLI 入口；同时确认前端展示相关 TypedDict 已从 `shared/types.py` 移出，避免共享域继续承载第三阶段后端合同；据此将 records 从“第三阶段可启动”更新为“第三阶段已启动，当前处于后端接口层与启动装配收口阶段”；本轮补跑 `python -m pytest tests -q`，结果为 `44 passed`
+- 对应需求点：第三阶段启动时必须先明确后端合同归属、统一入口职责边界与前端消费合同，避免继续沿用第二阶段“占位仍在 app/shared 内部”的旧口径
+- 风险和遗留问题：当前 `backend/` 仍是进程内 facade，不是 HTTP/SSE/WebSocket 服务；真实后端服务栈尚未选定；本地当前 PowerShell 未识别 `uv` 命令，若后续要求统一使用 `uv run ...`，需要先补环境路径校验
+- 下一步建议：以 `backend/service.py` 为起点补真实服务映射层，先冻结 `bootstrap / config / run / error` 最小接口，再推进前端工程骨架、流式状态推送与第三阶段联调测试
+- 对应论文章节：系统架构设计、前后端接口设计、系统实现与验证、工程化与交接规范
+
+- 负责 Agent：Orchestrator
+- 对应里程碑：第三阶段启动前仓库审查与优先级重排
+- 修改模块：`docs/records/CURRENT_STATUS.md` / `docs/records/MILESTONES.md` / `docs/records/HANDOFF.md` / 仓库代码与 specs 审查
+- 修改内容：基于 `docs/specs/07-frontend-spec.md`、`08-milestones-data-test.md` 与当前代码现状，对第三阶段目标、缺口与可并行任务进行重新核对；确认当前仓库已具备第三阶段启动前的骨架基线，但仍缺少真实后端接口、前端工程骨架、`SmolVLA` 非 mock backend 与第三阶段联调测试；同步修正 records 中“第三阶段前准备期 / 未开始 / 第二阶段继续推进”三套口径不一致的问题，并把当前优先级栈显式写入 `CURRENT_STATUS.md`
+- 对应需求点：阶段切换时必须让 records、spec 与代码事实一致，并明确下一步 owner、优先级与并行策略，避免第三阶段启动时继续沿用第二阶段口径
+- 风险和遗留问题：当前仓库仍无真实 HTTP/SSE/WebSocket 服务实现，也无任何前端工程文件；`docs/reference/INTERFACES.md` 当前不存在，第三阶段若新增真实接口，需要以现有 `specs + shared/types + app facade` 作为临时合同基线并继续保持文档同步
+- 下一步建议：先由 Backend Agent 落真实接口骨架并冻结最小合同，再由 Frontend Agent 创建 UI 工程接线；Execution / QA / Infra 可围绕 `SmolVLA` MCP 化、联调测试与 Ubuntu 实机验证并行推进
+- 对应论文章节：系统架构设计、前端交互设计、系统实现与验证、工程化与交接规范
+
+- 负责 Agent：Documentation Agent
 - 对应里程碑：第二阶段当前事实持续同步
 - 修改模块：`docs/records/CURRENT_STATUS.md` / `docs/records/MILESTONES.md` / `docs/records/HANDOFF.md` / `docs/records/TEST_REPORT.md` / `docs/records/DEVELOPMENT_LOG.md` / `docs/specs/11-ubuntu-runbook.md`
 - 修改内容：在第二阶段主线持续推进时继续同步 records；将当前全量测试口径更新到 `44 passed`，并在统一入口 CLI 恢复可运行后恢复 CURRENT_STATUS / HANDOFF / runbook 中关于命令行入口的正向事实描述，同时保留“外部链路未验证”的边界说明
