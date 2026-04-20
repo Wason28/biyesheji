@@ -2,20 +2,44 @@ decision:
   llm_provider: minimax
   llm_model: MiniMax-M2.1
   llm_api_key: ""
+  llm_local_path: ""
   max_iterations: 10
 
 perception:
   vlm_provider: minimax_mcp_vision
   vlm_model: minimax-mcp-vision-latest
   vlm_api_key: ""
+  vlm_local_path: ""
+  vlm_base_url: ""
+  vlm_timeout_s: 15.0
+  vlm_max_retries: 2
+  vlm_max_tokens: 512
+  camera_backend: mock
+  camera_device_id: mock_camera_rgb_01
+  camera_frame_id: camera_color_optical_frame
+  camera_width: 640
+  camera_height: 480
+  camera_fps: 30.0
+  robot_state_backend: mock
+  robot_state_topic: /mock/robot_state
+  robot_state_base_frame: base_link
+  robot_state_timeout_s: 1.0
 
 execution:
   vla_model_path: ./models/smolvla_finetuned
   robot_config: ./lerobot_configs/my_robot.yaml
+  robot_adapter: mock_lerobot
+  smolvla_backend: mock_smolvla
+  safety_policy: fail_closed
+  stop_mode: estop_latched
   workspace_limits:
     x: [-0.5, 0.5]
     y: [-0.5, 0.5]
     z: [0.0, 0.8]
+  home_pose:
+    x: 0.0
+    y: 0.0
+    z: 0.4
 
 frontend:
   port: 7860

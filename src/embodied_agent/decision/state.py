@@ -27,6 +27,9 @@ class DecisionMetrics(TypedDict, total=False):
 
 
 class DecisionAgentState(SharedAgentState, total=False):
+    scene_observations: dict[str, Any]
+    selected_capability: str
+    selected_capability_args: dict[str, Any]
     selected_action: str
     selected_action_args: dict[str, Any]
     last_execution: ExecutionResult
@@ -108,9 +111,12 @@ def create_initial_state(
         "current_image": current_image,
         "robot_state": robot_state or empty_robot_state(),
         "scene_description": "",
+        "scene_observations": {},
         "action_result": "in_progress",
         "iteration_count": 0,
         "conversation_history": [],
+        "selected_capability": "",
+        "selected_capability_args": {},
         "selected_action": "",
         "selected_action_args": {},
         "last_execution": {
@@ -151,9 +157,12 @@ def ensure_agent_state(
         "current_image": str(state.get("current_image", "")),
         "robot_state": _coerce_robot_state(state.get("robot_state")),
         "scene_description": str(state.get("scene_description", "")),
+        "scene_observations": dict(state.get("scene_observations", {})),
         "action_result": state.get("action_result", "in_progress"),
         "iteration_count": int(state.get("iteration_count", 0)),
         "conversation_history": _coerce_history(state.get("conversation_history")),
+        "selected_capability": str(state.get("selected_capability", "")).strip(),
+        "selected_capability_args": dict(state.get("selected_capability_args", {})),
         "selected_action": str(state.get("selected_action", "")).strip(),
         "selected_action_args": dict(state.get("selected_action_args", {})),
         "last_execution": dict(state.get("last_execution", {})),
@@ -173,7 +182,7 @@ def ensure_agent_state(
     if not normalized["last_execution"]:
         normalized["last_execution"] = {
             "status": normalized["action_result"],
-            "action_name": normalized["selected_action"],
+            "action_name": normalized["selected_action"] or normalized["selected_capability"],
             "message": "",
             "logs": [],
         }

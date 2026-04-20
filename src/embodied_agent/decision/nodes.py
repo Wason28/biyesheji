@@ -81,6 +81,40 @@ def _record_tool_response(
     )
 
 
+def _select_capability_and_action(
+    current_task: str,
+    state: DecisionAgentState,
+) -> tuple[str, str, dict[str, Any]]:
+    normalized_task = current_task.strip().lower()
+    scene_observations = state.get("scene_observations", {})
+    robot_grasp_state = str(scene_observations.get("robot_grasp_state", "")).lower()
+    risk_flags = scene_observations.get("risk_flags", []) if isinstance(scene_observations, dict) else []
+    objects = scene_observations.get("objects", []) if isinstance(scene_observations, dict) else []
+    has_explicit_ungraspable_object = any(
+        isinstance(item, dict) and item.get("graspable") is False
+        for item in objects
+    )
+    base_arguments = {
+        "task_description": current_task,
+        "current_image": state.get("current_image", ""),
+        "robot_state": state.get("robot_state", {}),
+    }
+
+    if any(keyword in normalized_task for keyword in ("回到安全位置", "回零", "回原点", "move home", "home")):
+        return "return_home", "move_home", {}
+    if any(keyword in normalized_task for keyword in ("释放", "松开", "放下", "release")):
+        return "release_object", "release", {}
+    if robot_grasp_state == "closed" and any(keyword in normalized_task for keyword in ("放", "置", "release", "drop")):
+        return "release_object", "release", {}
+    if any(keyword in normalized_task for keyword in ("抓", "取", "pick", "grasp")):
+        if risk_flags or has_explicit_ungraspable_object:
+            return "return_home", "move_home", {}
+        return "pick_and_place", "run_smolvla", base_arguments
+    if any(keyword in normalized_task for keyword in ("放", "置", "drop", "place")):
+        return "release_object", "release", {}
+    return "pick_and_place", "run_smolvla", base_arguments
+
+
 def _run_node(
     node_name: str,
     state: DecisionAgentState,
@@ -121,6 +155,8 @@ def _run_node(
             duration_ms=(deps.now_ms() - started_at) * 1000,
         )
         return failed_state
+
+
 
 
 def task_planner_node(state: DecisionAgentState, deps: NodeDependencies) -> DecisionAgentState:
@@ -194,6 +230,7 @@ def scene_analyzer_node(state: DecisionAgentState, deps: NodeDependencies) -> De
         next_state["current_image"] = str(image_response.get("content", ""))
         next_state["robot_state"] = dict(robot_response.get("content", {}))
         next_state["scene_description"] = str(scene_response.get("content", ""))
+        next_state["scene_observations"] = dict(scene_response.get("metadata", {})).get("structured_observations", {}) if isinstance(scene_response.get("metadata", {}), dict) else {}
         next_state = set_last_node_result(
             next_state,
             node="scene_analyzer",
@@ -249,18 +286,21 @@ def action_decider_node(state: DecisionAgentState, deps: NodeDependencies) -> De
 
         next_state = dict(normalized_state)
         next_state["current_task"] = current_task
-        next_state["selected_action"] = "run_smolvla"
-        next_state["selected_action_args"] = {
-            "task_description": current_task,
-            "current_image": normalized_state.get("current_image", ""),
-            "robot_state": normalized_state.get("robot_state", {}),
-        }
+        selected_capability, selected_action, selected_action_args = _select_capability_and_action(
+            current_task,
+            normalized_state,
+        )
+        next_state["selected_capability"] = selected_capability
+        next_state["selected_capability_args"] = dict(selected_action_args)
+        next_state["selected_action"] = selected_action
+        next_state["selected_action_args"] = dict(selected_action_args)
         next_state = set_last_node_result(
             next_state,
             node="action_decider",
             status_code=200,
             message="动作决策完成",
             metadata={
+                "selected_capability": next_state["selected_capability"],
                 "selected_action": next_state["selected_action"],
                 "current_task": current_task,
             },
@@ -268,9 +308,10 @@ def action_decider_node(state: DecisionAgentState, deps: NodeDependencies) -> De
         return append_history(
             next_state,
             node="action_decider",
-            message=f"为任务选择动作: {next_state['selected_action']}",
+            message=f"为任务选择能力: {next_state['selected_capability']} -> {next_state['selected_action']}",
             status="ok",
             metadata={
+                "capability": next_state["selected_capability"],
                 "action": next_state["selected_action"],
                 "task": current_task,
                 "scene_description": normalized_state.get("scene_description", ""),
@@ -287,6 +328,7 @@ def executor_node(state: DecisionAgentState, deps: NodeDependencies) -> Decision
         runtime_deps: NodeDependencies,
     ) -> DecisionAgentState:
         selected_action = normalized_state.get("selected_action", "").strip()
+        selected_capability = normalized_state.get("selected_capability", "").strip()
         if not selected_action:
             next_state = dict(normalized_state)
             next_state["action_result"] = "failed"
@@ -302,7 +344,7 @@ def executor_node(state: DecisionAgentState, deps: NodeDependencies) -> Decision
                 node="executor",
                 message="执行阶段缺少 selected_action",
                 status="error",
-                metadata={},
+                metadata={"selected_capability": selected_capability},
                 history_limit=runtime_deps.max_history_entries,
             )
 
@@ -325,6 +367,7 @@ def executor_node(state: DecisionAgentState, deps: NodeDependencies) -> Decision
             status_code=int(response.get("status_code", 500)),
             message=str(execution_result.get("message", response.get("message", ""))),
             metadata={
+                "selected_capability": selected_capability,
                 "selected_action": selected_action,
                 "tool_ok": bool(response.get("ok", False)),
             },
@@ -335,6 +378,7 @@ def executor_node(state: DecisionAgentState, deps: NodeDependencies) -> Decision
             message=f"执行动作 {selected_action}",
             status="ok" if response.get("ok") else "error",
             metadata={
+                "selected_capability": selected_capability,
                 "execution_result": execution_result,
             },
             history_limit=runtime_deps.max_history_entries,
@@ -363,6 +407,7 @@ def verifier_node(state: DecisionAgentState, deps: NodeDependencies) -> Decision
         next_state = _record_tool_response(next_state, response=verify_scene_response)
         if verify_scene_response.get("ok"):
             next_state["scene_description"] = str(verify_scene_response.get("content", ""))
+            next_state["scene_observations"] = dict(verify_scene_response.get("metadata", {})).get("structured_observations", {}) if isinstance(verify_scene_response.get("metadata", {}), dict) else {}
 
         queue = list(next_state.get("task_queue", []))
         current_task = str(next_state.get("current_task", "")).strip()

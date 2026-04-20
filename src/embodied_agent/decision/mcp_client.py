@@ -6,18 +6,13 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Callable, Protocol, TypedDict
 
-from ..shared.types import ExecutionResult
+from ..shared.types import ExecutionResult, ToolEnvelope
 
 ToolHandler = Callable[[dict[str, Any]], Any]
 
 
-class MCPResponse(TypedDict, total=False):
-    ok: bool
-    status_code: int
-    tool_name: str
-    content: Any
-    message: str
-    metadata: dict[str, Any]
+class MCPResponse(ToolEnvelope, total=False):
+    pass
 
 
 class MCPClientProtocol(Protocol):

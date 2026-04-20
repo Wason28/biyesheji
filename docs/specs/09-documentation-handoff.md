@@ -29,6 +29,7 @@
 - `docs/specs/08-milestones-data-test.md`
 - `docs/specs/09-documentation-handoff.md`
 - `docs/specs/10-thesis-spec.md`
+- `docs/specs/11-ubuntu-runbook.md`
 - `docs/records/CURRENT_STATUS.md`
 - `docs/records/MILESTONES.md`
 - `docs/records/DEVELOPMENT_LOG.md`
@@ -68,6 +69,7 @@
 
 工作完成后的文档维护要求：
 - 完成代码实现后，必须检查 `README.md`、`docs/SESSION_START.md`、`docs/records/CURRENT_STATUS.md` 和对应 `docs/specs/` 是否仍与当前实现一致。
+- 完成 Ubuntu 相关运行或验证工作后，必须同步检查 `docs/specs/11-ubuntu-runbook.md`、`docs/records/TEST_REPORT.md`、`docs/records/CURRENT_STATUS.md` 和 `docs/records/HANDOFF.md` 是否仍与当前事实一致。
 - 完成测试或验证后，必须同步更新 `docs/records/TEST_REPORT.md`；若阶段判断变化，还必须同步更新 `docs/records/CURRENT_STATUS.md`、`docs/records/MILESTONES.md` 和 `docs/records/HANDOFF.md`。
 - 完成影响论文事实材料的工作后，必须评估是否需要同步更新 `docs/records/THESIS_PROGRESS.md`、`docs/records/EXPERIMENTS.md` 和 `docs/records/FIGURE_ASSETS.md`。
 - 如果本轮工作未更新上述文档，交接时必须明确说明原因和待补项。

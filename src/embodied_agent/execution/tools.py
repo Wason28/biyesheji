@@ -1,4 +1,4 @@
-"""Mock execution tools with validation, safety checks, and adapter integration."""
+"""Execution tools with phase-2 contracts, adapter factories, and safety boundaries."""
 
 from __future__ import annotations
 
@@ -9,10 +9,18 @@ from embodied_agent.shared.config import AppConfig
 from embodied_agent.shared.types import RobotState
 
 from .config import ExecutionSafetyConfig, build_execution_safety_config
-from .robot_adapter import AdapterError, MockLeRobotAdapter
+from .robot_adapter import AdapterError, BaseRobotAdapter, build_robot_adapter
 from .safety import SafetyError, SafetyManager
-from .smolvla import MockSmolVLAAdapter, SmolVLAError
-from .types import CartesianPose, ExecutionToolResult, ToolName
+from .smolvla import BaseSmolVLAAdapter, SmolVLAError, build_smolvla_backend
+from .types import (
+    ActionContract,
+    CapabilityContract,
+    CapabilityName,
+    ExecutionToolResult,
+    SafetyBoundary,
+    SafetyStage,
+    ToolName,
+)
 from .validators import (
     ValidationError,
     validate_cartesian_pose,
@@ -22,26 +30,211 @@ from .validators import (
     validate_task_description,
 )
 
+_ACTION_OUTPUT_SCHEMA = {
+    "type": "object",
+    "required": ["status", "action_name", "message", "logs", "robot_state"],
+}
+
+_ACTION_CONTRACTS: dict[ToolName, ActionContract] = {
+    "move_to": {
+        "action_name": "move_to",
+        "tool_name": "move_to",
+        "description": "移动末端执行器到指定笛卡尔位姿。",
+        "input_schema": {
+            "type": "object",
+            "required": ["x", "y", "z"],
+            "properties": {
+                "x": {"type": "number"},
+                "y": {"type": "number"},
+                "z": {"type": "number"},
+                "orientation": {"type": ["object", "array"]},
+            },
+        },
+        "output_schema": _ACTION_OUTPUT_SCHEMA,
+        "capability_names": ["pick_and_place"],
+        "safety_stages": ["input_validation", "preflight", "adapter_dispatch", "telemetry_check"],
+        "estop_on_failure": True,
+    },
+    "move_home": {
+        "action_name": "move_home",
+        "tool_name": "move_home",
+        "description": "按照安全路径回零。",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "output_schema": _ACTION_OUTPUT_SCHEMA,
+        "capability_names": ["pick_and_place", "return_home"],
+        "safety_stages": ["preflight", "adapter_dispatch", "telemetry_check"],
+        "estop_on_failure": True,
+    },
+    "grasp": {
+        "action_name": "grasp",
+        "tool_name": "grasp",
+        "description": "执行夹爪抓取。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "force": {"type": "number"},
+            },
+        },
+        "output_schema": _ACTION_OUTPUT_SCHEMA,
+        "capability_names": ["pick_and_place"],
+        "safety_stages": ["input_validation", "preflight", "adapter_dispatch", "telemetry_check"],
+        "estop_on_failure": True,
+    },
+    "release": {
+        "action_name": "release",
+        "tool_name": "release",
+        "description": "执行夹爪释放。",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "output_schema": _ACTION_OUTPUT_SCHEMA,
+        "capability_names": ["pick_and_place", "release_object"],
+        "safety_stages": ["preflight", "adapter_dispatch", "telemetry_check"],
+        "estop_on_failure": True,
+    },
+    "run_smolvla": {
+        "action_name": "run_smolvla",
+        "tool_name": "run_smolvla",
+        "description": "调用固定 SmolVLA 执行抓取能力。",
+        "input_schema": {
+            "type": "object",
+            "required": ["task_description", "current_image", "robot_state"],
+            "properties": {
+                "task_description": {"type": "string"},
+                "current_image": {"type": "string"},
+                "robot_state": {"type": "object"},
+            },
+        },
+        "output_schema": _ACTION_OUTPUT_SCHEMA,
+        "capability_names": ["pick_and_place"],
+        "safety_stages": ["input_validation", "preflight", "adapter_dispatch", "telemetry_check"],
+        "estop_on_failure": True,
+    },
+}
+
+_CAPABILITY_CONTRACTS: dict[CapabilityName, CapabilityContract] = {
+    "pick_and_place": {
+        "capability_name": "pick_and_place",
+        "description": "调用固定 SmolVLA 能力完成桌面抓取与放置。",
+        "default_action": "run_smolvla",
+        "available_actions": ["run_smolvla", "move_to", "grasp", "release", "move_home"],
+        "execution_mode": "vla",
+        "required_tools": ["run_smolvla"],
+        "fixed_model": True,
+    },
+    "return_home": {
+        "capability_name": "return_home",
+        "description": "沿安全路径回到 home 位姿。",
+        "default_action": "move_home",
+        "available_actions": ["move_home"],
+        "execution_mode": "atomic",
+        "required_tools": ["move_home"],
+        "fixed_model": False,
+    },
+    "release_object": {
+        "capability_name": "release_object",
+        "description": "保持当前位姿并释放夹爪。",
+        "default_action": "release",
+        "available_actions": ["release"],
+        "execution_mode": "atomic",
+        "required_tools": ["release"],
+        "fixed_model": False,
+    },
+}
+
+_DEFAULT_CAPABILITY_BY_ACTION: dict[ToolName, CapabilityName] = {
+    "move_home": "return_home",
+    "release": "release_object",
+    "run_smolvla": "pick_and_place",
+}
+
 
 @dataclass(slots=True)
 class ExecutionRuntime:
-    """Stateful runtime hosting the phase-1 execution tools."""
+    """Stateful runtime hosting execution tools with stable contracts."""
 
     config: ExecutionSafetyConfig
-    adapter: MockLeRobotAdapter
+    adapter: BaseRobotAdapter
     safety: SafetyManager
-    smolvla: MockSmolVLAAdapter
+    smolvla: BaseSmolVLAAdapter
 
     @classmethod
-    def create(cls, app_config: AppConfig | None = None) -> "ExecutionRuntime":
+    def create(
+        cls,
+        app_config: AppConfig | None = None,
+        *,
+        adapter_factory: Callable[[ExecutionSafetyConfig], BaseRobotAdapter] | None = None,
+        smolvla_factory: Callable[[ExecutionSafetyConfig], BaseSmolVLAAdapter] | None = None,
+    ) -> "ExecutionRuntime":
         shared_execution = app_config.execution if app_config is not None else None
         config = build_execution_safety_config(shared_execution)
+        adapter_builder = adapter_factory or build_robot_adapter
+        smolvla_builder = smolvla_factory or build_smolvla_backend
         return cls(
             config=config,
-            adapter=MockLeRobotAdapter(config),
+            adapter=adapter_builder(config),
             safety=SafetyManager(config),
-            smolvla=MockSmolVLAAdapter(config),
+            smolvla=smolvla_builder(config),
         )
+
+    @property
+    def is_mock(self) -> bool:
+        return self.adapter.adapter_name.startswith("mock_") and self.smolvla.backend_name.startswith("mock_")
+
+    def get_action_contract(self, action_name: ToolName) -> ActionContract:
+        return dict(_ACTION_CONTRACTS[action_name])
+
+    def list_capabilities(self) -> list[CapabilityContract]:
+        return [dict(contract) for contract in _CAPABILITY_CONTRACTS.values()]
+
+    def describe_safety_boundary(
+        self,
+        *,
+        checked_stages: list[SafetyStage] | None = None,
+    ) -> SafetyBoundary:
+        return self.safety.describe_boundary(
+            adapter_name=self.adapter.adapter_name,
+            smolvla_backend=self.smolvla.backend_name,
+            checked_stages=checked_stages,
+            estop_engaged=self.adapter.estopped,
+            stop_reason=self.adapter.last_stop_reason or None,
+        )
+
+    def describe_runtime_profile(self) -> dict[str, Any]:
+        return {
+            "adapter": {
+                "name": self.adapter.adapter_name,
+                "config_path": self.config.robot_config,
+                "communication_retries": self.config.communication_retries,
+            },
+            "smolvla_backend": {
+                "name": self.smolvla.backend_name,
+                "model_path": self.config.vla_model_path,
+                "fixed_model": True,
+            },
+            "safety_boundary": self.describe_safety_boundary(),
+        }
+
+    def describe_execution_model(self) -> dict[str, Any]:
+        return {
+            "name": "SmolVLA",
+            "model_path": self.config.vla_model_path,
+            "backend": self.smolvla.backend_name,
+            "adapter": self.adapter.adapter_name,
+            "mutable": False,
+            "capability_names": ["pick_and_place"],
+        }
+
+    def _resolve_capability_name(self, action_name: ToolName) -> CapabilityName | None:
+        return _DEFAULT_CAPABILITY_BY_ACTION.get(action_name)
+
+    def _build_contract_payload(self, action_name: ToolName) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "action_contract": self.get_action_contract(action_name),
+        }
+        capability_name = self._resolve_capability_name(action_name)
+        if capability_name is not None:
+            payload["capability_name"] = capability_name
+            payload["capability_contract"] = dict(_CAPABILITY_CONTRACTS[capability_name])
+        return payload
 
     def _success(
         self,
@@ -53,58 +246,83 @@ class ExecutionRuntime:
         validated_params: dict[str, Any] | None = None,
         safety_checks: list[str] | None = None,
         executed_plan: list[dict[str, Any]] | None = None,
+        checked_stages: list[SafetyStage] | None = None,
     ) -> ExecutionToolResult:
         telemetry = self.adapter.read_telemetry()
-        return {
+        result: ExecutionToolResult = {
             "status": "success",
             "action_name": action_name,
             "tool_name": action_name,
             "message": message,
             "logs": logs,
-            "mock": True,
+            "mock": self.is_mock,
             "validated_params": validated_params or {},
             "safety_checks": safety_checks or [],
             "telemetry": telemetry,
             "robot_state": robot_state,
             "executed_plan": executed_plan or [],
+            "safety_boundary": self.describe_safety_boundary(checked_stages=checked_stages or []),
         }
+        result.update(self._build_contract_payload(action_name))
+        return result
 
-    def _failure(self, action_name: ToolName, error: Exception, logs: list[str]) -> ExecutionToolResult:
+    def _failure(
+        self,
+        action_name: ToolName,
+        error: Exception,
+        logs: list[str],
+        *,
+        checked_stages: list[SafetyStage] | None = None,
+    ) -> ExecutionToolResult:
         self.adapter.emergency_stop(f"{action_name}: {error}")
         state = self.adapter.snapshot_state()
-        return {
+        boundary_stages = list(dict.fromkeys([*(checked_stages or []), "emergency_stop"]))
+        result: ExecutionToolResult = {
             "status": "failed",
             "action_name": action_name,
             "tool_name": action_name,
             "message": str(error),
             "logs": logs + [f"安全链触发急停: {error}"],
-            "mock": True,
+            "mock": self.is_mock,
             "error_code": error.__class__.__name__,
             "robot_state": state,
+            "safety_boundary": self.describe_safety_boundary(checked_stages=boundary_stages),
         }
+        result.update(self._build_contract_payload(action_name))
+        return result
 
     def _run_guarded(
         self,
         action_name: ToolName,
-        operation: Callable[[list[str]], ExecutionToolResult],
+        operation: Callable[[list[str], list[SafetyStage]], ExecutionToolResult],
     ) -> ExecutionToolResult:
-        logs = [f"{action_name}: 开始执行 mock 工具。"]
+        logs = [f"{action_name}: 开始执行 {'mock' if self.is_mock else 'runtime'} 工具。"]
+        checked_stages: list[SafetyStage] = []
         try:
-            return operation(logs)
+            return operation(logs, checked_stages)
         except (ValidationError, SafetyError, AdapterError, SmolVLAError) as error:
-            return self._failure(action_name, error, logs)
+            return self._failure(action_name, error, logs, checked_stages=checked_stages)
         except Exception as error:  # pragma: no cover - 兜底保护
-            return self._failure(action_name, RuntimeError(f"未预期异常: {error}"), logs)
+            return self._failure(
+                action_name,
+                RuntimeError(f"未预期异常: {error}"),
+                logs,
+                checked_stages=checked_stages,
+            )
 
-    def move_to(self, x: Any, y: Any, z: Any, orientation: Any) -> ExecutionToolResult:
-        def operation(logs: list[str]) -> ExecutionToolResult:
+    def move_to(self, x: Any, y: Any, z: Any, orientation: Any | None = None) -> ExecutionToolResult:
+        def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
             current_state = self.adapter.sync_state()
             logs.append("已同步机器人状态。")
             pose = validate_cartesian_pose(x, y, z, orientation, self.config)
+            checked_stages.append("input_validation")
             safety_checks = self.safety.preflight_motion(pose, current_state)
+            checked_stages.append("preflight")
             logs.append("参数校验与运动前安全检查通过。")
             robot_state = self.adapter.move_to_pose(pose)
+            checked_stages.append("adapter_dispatch")
             safety_checks += self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            checked_stages.append("telemetry_check")
             logs.append("已通过 mock LeRobot 适配器下发 move_to。")
             return self._success(
                 "move_to",
@@ -113,17 +331,21 @@ class ExecutionRuntime:
                 robot_state=robot_state,
                 validated_params=pose,
                 safety_checks=safety_checks,
+                checked_stages=checked_stages,
             )
 
         return self._run_guarded("move_to", operation)
 
     def move_home(self) -> ExecutionToolResult:
-        def operation(logs: list[str]) -> ExecutionToolResult:
+        def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
             current_state = self.adapter.sync_state()
             logs.append("已同步机器人状态。")
             safety_checks = self.safety.preflight_home(current_state)
+            checked_stages.append("preflight")
             robot_state = self.adapter.move_home()
+            checked_stages.append("adapter_dispatch")
             safety_checks += self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            checked_stages.append("telemetry_check")
             logs.append("已通过预定义安全路径回零。")
             return self._success(
                 "move_home",
@@ -132,18 +354,23 @@ class ExecutionRuntime:
                 robot_state=robot_state,
                 validated_params={},
                 safety_checks=safety_checks,
+                checked_stages=checked_stages,
             )
 
         return self._run_guarded("move_home", operation)
 
-    def grasp(self, force: Any) -> ExecutionToolResult:
-        def operation(logs: list[str]) -> ExecutionToolResult:
+    def grasp(self, force: Any | None = None) -> ExecutionToolResult:
+        def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
             _ = self.adapter.sync_state()
             logs.append("已同步机器人状态。")
             grasp_force = validate_force(force, self.config)
+            checked_stages.append("input_validation")
             safety_checks = self.safety.preflight_grasp(grasp_force)
+            checked_stages.append("preflight")
             robot_state = self.adapter.close_gripper(grasp_force)
+            checked_stages.append("adapter_dispatch")
             safety_checks += self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            checked_stages.append("telemetry_check")
             logs.append("已通过 mock LeRobot 适配器闭合夹爪。")
             return self._success(
                 "grasp",
@@ -152,17 +379,21 @@ class ExecutionRuntime:
                 robot_state=robot_state,
                 validated_params={"force": grasp_force},
                 safety_checks=safety_checks,
+                checked_stages=checked_stages,
             )
 
         return self._run_guarded("grasp", operation)
 
     def release(self) -> ExecutionToolResult:
-        def operation(logs: list[str]) -> ExecutionToolResult:
+        def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
             _ = self.adapter.sync_state()
             logs.append("已同步机器人状态。")
             safety_checks = self.safety.preflight_release()
+            checked_stages.append("preflight")
             robot_state = self.adapter.open_gripper()
+            checked_stages.append("adapter_dispatch")
             safety_checks += self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            checked_stages.append("telemetry_check")
             logs.append("已通过 mock LeRobot 适配器打开夹爪。")
             return self._success(
                 "release",
@@ -171,6 +402,7 @@ class ExecutionRuntime:
                 robot_state=robot_state,
                 validated_params={},
                 safety_checks=safety_checks,
+                checked_stages=checked_stages,
             )
 
         return self._run_guarded("release", operation)
@@ -181,17 +413,21 @@ class ExecutionRuntime:
         current_image: Any,
         robot_state: Any,
     ) -> ExecutionToolResult:
-        def operation(logs: list[str]) -> ExecutionToolResult:
+        def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
             validated_task = validate_task_description(task_description)
             validated_image = validate_image_reference(current_image)
             validated_robot_state = validate_robot_state(robot_state)
-            logs.append("SmolVLA 输入校验通过。")
+            checked_stages.append("input_validation")
+            self.adapter.load_state(validated_robot_state)
+            logs.append("SmolVLA 输入校验通过，并已同步外部机器人状态。")
 
             plan = self.smolvla.plan(validated_task, validated_image, validated_robot_state)
+            checked_stages.append("preflight")
             logs.append(f"SmolVLA mock 生成 {len(plan)} 个动作。")
 
             final_state = self.adapter.sync_state()
             plan_logs: list[str] = []
+            checked_stages.append("adapter_dispatch")
             for index, step in enumerate(plan, start=1):
                 tool_name = step["tool"]
                 arguments = step["arguments"]
@@ -216,6 +452,7 @@ class ExecutionRuntime:
                 final_state = result["robot_state"]
 
             safety_checks = self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            checked_stages.append("telemetry_check")
             logs.append("SmolVLA mock 动作序列执行完成。")
             return self._success(
                 "run_smolvla",
@@ -228,6 +465,7 @@ class ExecutionRuntime:
                 },
                 safety_checks=safety_checks,
                 executed_plan=plan,
+                checked_stages=checked_stages,
             )
 
         return self._run_guarded("run_smolvla", operation)
@@ -240,7 +478,7 @@ def get_runtime() -> ExecutionRuntime:
     return _DEFAULT_RUNTIME
 
 
-def move_to(x: Any, y: Any, z: Any, orientation: Any) -> ExecutionToolResult:
+def move_to(x: Any, y: Any, z: Any, orientation: Any | None = None) -> ExecutionToolResult:
     return get_runtime().move_to(x, y, z, orientation)
 
 
@@ -248,7 +486,7 @@ def move_home() -> ExecutionToolResult:
     return get_runtime().move_home()
 
 
-def grasp(force: Any) -> ExecutionToolResult:
+def grasp(force: Any | None = None) -> ExecutionToolResult:
     return get_runtime().grasp(force)
 
 

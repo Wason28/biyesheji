@@ -78,3 +78,45 @@ class UnsupportedProviderError(PerceptionError):
             retriable=False,
             details={"provider": provider},
         )
+
+
+
+
+class VLMAuthenticationError(PerceptionError):
+    def __init__(self, message: str = "VLM 鉴权失败", **details: Any) -> None:
+        super().__init__(
+            code="PERCEPTION_VLM_AUTHENTICATION_FAILURE",
+            message=message,
+            retriable=False,
+            details=details,
+        )
+
+
+class VLMRateLimitError(PerceptionError):
+    def __init__(self, message: str = "VLM 调用触发限流", **details: Any) -> None:
+        super().__init__(
+            code="PERCEPTION_VLM_RATE_LIMITED",
+            message=message,
+            retriable=True,
+            details=details,
+        )
+
+
+class VLMResponseFormatError(PerceptionError):
+    def __init__(self, message: str = "VLM 返回格式不合法", **details: Any) -> None:
+        super().__init__(
+            code="PERCEPTION_VLM_INVALID_RESPONSE",
+            message=message,
+            retriable=False,
+            details=details,
+        )
+
+
+class AdapterConfigurationError(PerceptionError):
+    def __init__(self, message: str = "感知适配器配置不合法", **details: Any) -> None:
+        super().__init__(
+            code="PERCEPTION_ADAPTER_CONFIGURATION_ERROR",
+            message=message,
+            retriable=False,
+            details=details,
+        )

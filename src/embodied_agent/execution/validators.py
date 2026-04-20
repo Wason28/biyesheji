@@ -75,7 +75,7 @@ def validate_cartesian_pose(
     x: Any,
     y: Any,
     z: Any,
-    orientation: Any,
+    orientation: Any | None,
     config: ExecutionSafetyConfig,
 ) -> CartesianPose:
     pose_x = validate_workspace_value("x", require_float("x", x), config)
@@ -85,11 +85,13 @@ def validate_cartesian_pose(
         "x": pose_x,
         "y": pose_y,
         "z": pose_z,
-        "orientation": normalize_quaternion(orientation),
+        "orientation": normalize_quaternion(orientation) if orientation is not None else dict(config.default_orientation),
     }
 
 
-def validate_force(force: Any, config: ExecutionSafetyConfig) -> float:
+def validate_force(force: Any | None, config: ExecutionSafetyConfig) -> float:
+    if force is None:
+        return min(max(8.0, config.min_force), config.max_force)
     grasp_force = require_float("force", force)
     if not config.min_force <= grasp_force <= config.max_force:
         raise ValidationError(
@@ -109,13 +111,40 @@ def validate_robot_state(robot_state: Any) -> RobotState:
         require_float(f"robot_state.joint_positions[{index}]", joint)
 
     ee_pose_mapping = require_mapping("robot_state.ee_pose", ee_pose)
+    position = require_mapping("robot_state.ee_pose.position", ee_pose_mapping.get("position"))
+    orientation = require_mapping("robot_state.ee_pose.orientation", ee_pose_mapping.get("orientation"))
+    reference_frame = require_non_empty_text(
+        "robot_state.ee_pose.reference_frame",
+        ee_pose_mapping.get("reference_frame"),
+    )
+
     for field_name in ("x", "y", "z"):
-        if field_name in ee_pose_mapping:
-            require_float(f"robot_state.ee_pose.{field_name}", ee_pose_mapping[field_name])
+        require_float(f"robot_state.ee_pose.position.{field_name}", position.get(field_name))
+    for field_name in ("x", "y", "z", "w"):
+        require_float(f"robot_state.ee_pose.orientation.{field_name}", orientation.get(field_name))
+
+    normalized_pose: dict[str, Any] = {
+        "position": {
+            "x": float(position["x"]),
+            "y": float(position["y"]),
+            "z": float(position["z"]),
+        },
+        "orientation": {
+            "x": float(orientation["x"]),
+            "y": float(orientation["y"]),
+            "z": float(orientation["z"]),
+            "w": float(orientation["w"]),
+        },
+        "reference_frame": reference_frame,
+    }
+
+    for optional_field in ("gripper_force", "gripper_closed", "holding_object", "estop_reason"):
+        if optional_field in ee_pose_mapping:
+            normalized_pose[optional_field] = ee_pose_mapping[optional_field]
 
     return {
         "joint_positions": [float(joint) for joint in joints],
-        "ee_pose": ee_pose_mapping,
+        "ee_pose": normalized_pose,
     }
 
 

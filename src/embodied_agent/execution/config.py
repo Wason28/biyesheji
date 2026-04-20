@@ -15,6 +15,10 @@ class ExecutionSafetyConfig:
 
     vla_model_path: str = "./models/smolvla_finetuned"
     robot_config: str = "./lerobot_configs/my_robot.yaml"
+    robot_adapter: str = "mock_lerobot"
+    smolvla_backend: str = "mock_smolvla"
+    safety_policy: str = "fail_closed"
+    stop_mode: str = "estop_latched"
     workspace_limits: dict[str, tuple[float, float]] = field(
         default_factory=lambda: {
             "x": (-0.5, 0.5),
@@ -64,5 +68,10 @@ def build_execution_safety_config(
     return ExecutionSafetyConfig(
         vla_model_path=config.vla_model_path,
         robot_config=config.robot_config,
+        robot_adapter=config.robot_adapter,
+        smolvla_backend=config.smolvla_backend,
+        safety_policy=config.safety_policy,
+        stop_mode=config.stop_mode,
         workspace_limits=workspace_limits,
+        home_pose=dict(config.home_pose),
     )

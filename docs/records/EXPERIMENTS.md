@@ -46,6 +46,55 @@
 - 平均成功率
 - 常见失败原因
 
+### 5. 数据采集与微调前置检查
+
+目标：
+- 在不虚构真实链路的前提下，收敛 `LeRobot` 数据采集与 `SmolVLA` 微调启动门槛
+
+前置项：
+- 真实 `LeRobot` 机器人配置、相机输入与示教脚本可跑通
+- 至少完成 1 条真实示教轨迹落盘，用于验证数据目录、`Parquet + 视频帧` 格式和命名规则
+- 建立样本台账，记录轨迹编号、任务类型、成功/失败、失败原因、环境条件与素材索引
+- 明确目标样本规模为 50-100 组成功轨迹，覆盖不同物体位置与抓取角度
+- 明确 `SmolVLA` 训练输入、权重输出路径与实验记录回写位置，但在真实数据形成前不记录训练完成事实
+
+建议首条真实轨迹记录字段：
+- 记录日期
+- 执行人 / 负责 Agent
+- 设备与环境（机械臂、相机、桌面场景、光照）
+- 轨迹编号与数据目录
+- 任务类型（抓取 / 放置 / 分拣）
+- 目标物体与初始摆放情况
+- 是否成功落盘
+- 失败原因（若失败）
+- 视频 / 截图 / 日志索引
+- 对应样本版本号
+
+建议样本台账字段：
+- `sample_id`
+- `collection_date`
+- `task_type`
+- `object_type`
+- `success`
+- `failure_reason`
+- `operator`
+- `environment_tag`
+- `data_path`
+- `asset_refs`
+- `notes`
+
+建议微调准备字段：
+- `dataset_version`
+- `train_split`
+- `eval_split`
+- `base_model`
+- `output_dir`
+- `config_path`
+- `key_hparams`
+- `expected_metrics`
+- `run_status`
+- `result_refs`
+
 ## 当前实验状态
 
 - 尚无真实实验数据

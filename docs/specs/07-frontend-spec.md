@@ -67,3 +67,39 @@
 - 模型切换结果必须明确反馈。
 - 工具刷新结果必须可见。
 - 错误信息必须可提示给用户。
+
+## 6. 第二阶段前置接口占位
+
+在不进入第三阶段完整前端开发前，后端至少需要先沉淀以下最小接口占位和状态字段约束：
+
+- `bootstrap` 占位载荷必须至少包含：
+  - 当前配置快照：`decision / perception / execution / frontend`
+  - 执行层展示模型：`SmolVLA`
+  - 已注册工具列表
+  - 运行态快照字段清单
+- 配置快照最少覆盖：
+  - `decision.provider / model / api_key_configured / local_path`
+  - `perception.provider / model / api_key_configured / local_path`
+  - `execution.display_name / model_path / home_pose / mutable`
+  - `frontend.port / max_iterations / speed_scale`
+- 运行态快照最少覆盖：
+  - `run_id`
+  - `status`
+  - `current_node`
+  - `current_task`
+  - `scene_description`
+  - `action_result`
+  - `iteration_count`
+  - `max_iterations`
+  - `current_image`
+  - `robot_state`
+  - `last_execution`
+  - `logs`
+  - `error`
+
+约束：
+- 前端消费的运行态快照必须是显式适配后的展示合同，不直接暴露完整决策内部状态。
+- 配置载荷默认不回传明文 API Key，只返回空字符串和 `api_key_configured` 标记。
+- 工具面板依赖的工具列表合同必须兼容感知层与执行层当前已注册工具，并支持后续手动刷新。
+- 第二阶段可继续把 `bootstrap / config / run / error` 组织成接近真实后端服务的 facade，但不得把该 facade 写成完整前端服务或真实 HTTP/SSE/WebSocket 接口已实现。
+- 若需要补执行层展示信息，只能补稳定展示合同，如 `execution_capabilities` 与 `execution_safety`，不得让前端直接依赖执行层内部实现对象。

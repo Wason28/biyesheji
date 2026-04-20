@@ -97,3 +97,16 @@ class AgentState(TypedDict):
 - 主流程至少覆盖正常结束、循环继续、异常中止三类路径。
 - 节点逻辑应可在模拟工具下独立验证。
 - `AgentState` 新增字段时必须同步更新测试。
+
+## 8. 第二阶段边界
+
+允许变更：
+- 调整节点内部逻辑、提示词和模型选择策略。
+- 扩展内部状态字段和调试信息。
+- 在稳定 capability contract 下调整动作选择策略。
+
+禁止变更：
+- 直接访问硬件、机器人 SDK 或 `perception` / `execution` 内部实现。
+- 将具体执行工具名固化为长期对外合同。
+- 让前端展示协议直接绑定决策内部状态结构。
+- 改变 `task_planner -> scene_analyzer -> action_decider -> executor -> verifier` 的节点职责分工。

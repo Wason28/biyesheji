@@ -15,6 +15,7 @@
 
 - `docs/SESSION_START.md`：新会话快速接手入口
 - `docs/specs/`：实现规范
+  - 其中 `docs/specs/11-ubuntu-runbook.md` 用于记录当前 Ubuntu 目标环境下的最小安装、运行与验证说明
 - `docs/records/`：动态记录
 
 `docs/reference/` 不再作为主干知识层维护。若后续确有辅助资料需要保留，必须避免与 `specs/` 和 `records/` 重复。

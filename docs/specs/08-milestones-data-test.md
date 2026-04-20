@@ -42,3 +42,22 @@
 - 每一阶段结束时必须更新 `docs/records/MILESTONES.md`
 - 每一阶段必须补充对应测试结果到 `docs/records/TEST_REPORT.md`
 - 每一阶段必须同步检查论文进度与实验材料记录
+
+## 5. 第二阶段完成边界
+
+第二阶段主线完成以“节点与状态流转能力稳定”为准，不以后续真实硬件或前端联动是否完成作为唯一判断条件。
+
+第二阶段完成所需事实：
+- 决策层已完成 phase-2 主线增强，`task_planner -> scene_analyzer -> action_decider -> executor -> verifier` 的节点职责保持不变，但 capability/action 选择与状态流转比第一阶段更完整。
+- 感知层与执行层已形成 phase-2 可继续演进的接口边界：统一 `ToolEnvelope`、结构化 `ee_pose`、provider/adapter 工厂、execution capability/action contract。
+- 统一入口仍保持组合根角色，不承担跨层业务翻译，并能稳定装配 phase-2 当前所需能力。
+- 回归测试已覆盖 phase-2 主线新增能力，并保持全量通过。
+
+第二阶段完成但可继续并行未闭合的外部项：
+- Ubuntu 实机安装与运行验证
+- 前端联动与前后端配置联动
+- 真实 `VLM` / `LLM` / `SmolVLA` / 机械臂链路
+- 数据采集与微调支线的真实结果
+
+约束：
+- 上述外部项未完成时，可以表述为“第二阶段主线完成，外部验证项继续并行推进”，不得表述为“端到端完成”或“真实链路完成”。

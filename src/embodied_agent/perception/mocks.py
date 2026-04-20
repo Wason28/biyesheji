@@ -19,6 +19,7 @@ class MockCamera:
     camera_id: str = "mock_camera_rgb_01"
     width: int = 640
     height: int = 480
+    frame_id: str = "camera_color_optical_frame"
     fail_on_capture: bool = False
 
     def capture(self) -> CapturedImage:
@@ -31,7 +32,7 @@ class MockCamera:
             resolution={"width": self.width, "height": self.height},
             camera_parameters={
                 "camera_id": self.camera_id,
-                "frame_id": "camera_color_optical_frame",
+                "frame_id": self.frame_id,
                 "fx": 615.0,
                 "fy": 615.0,
                 "cx": self.width / 2,
@@ -43,6 +44,7 @@ class MockCamera:
 
 @dataclass(slots=True)
 class MockRobotStateClient:
+    reference_frame: str = "base_link"
     fail_on_read: bool = False
 
     def read_state(self) -> RobotStateSnapshot:
@@ -54,7 +56,7 @@ class MockRobotStateClient:
             ee_pose={
                 "position": {"x": 0.42, "y": -0.08, "z": 0.21},
                 "orientation": {"x": 0.0, "y": 0.707, "z": 0.0, "w": 0.707},
-                "reference_frame": "base_link",
+                "reference_frame": self.reference_frame,
             },
             timestamp=datetime.now(UTC).isoformat(),
         )

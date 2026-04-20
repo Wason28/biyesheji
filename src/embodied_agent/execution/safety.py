@@ -7,7 +7,7 @@ import math
 from embodied_agent.shared.types import RobotState
 
 from .config import ExecutionSafetyConfig
-from .types import CartesianPose
+from .types import CartesianPose, SafetyBoundary, SafetyStage
 
 
 class SafetyError(RuntimeError):
@@ -22,9 +22,10 @@ class SafetyManager:
 
     def preflight_motion(self, target_pose: CartesianPose, robot_state: RobotState) -> list[str]:
         current_pose = robot_state.get("ee_pose", {})
-        dx = float(target_pose["x"]) - float(current_pose.get("x", 0.0))
-        dy = float(target_pose["y"]) - float(current_pose.get("y", 0.0))
-        dz = float(target_pose["z"]) - float(current_pose.get("z", 0.0))
+        current_position = current_pose.get("position", {})
+        dx = float(target_pose["x"]) - float(current_position.get("x", 0.0))
+        dy = float(target_pose["y"]) - float(current_position.get("y", 0.0))
+        dz = float(target_pose["z"]) - float(current_position.get("z", 0.0))
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
 
         if distance > self._config.max_translation_step:
@@ -85,3 +86,27 @@ class SafetyManager:
             "电流监测通过",
             "位置偏差监测通过",
         ]
+
+    def describe_boundary(
+        self,
+        *,
+        adapter_name: str,
+        smolvla_backend: str,
+        checked_stages: list[SafetyStage] | None = None,
+        estop_engaged: bool = False,
+        stop_reason: str | None = None,
+    ) -> SafetyBoundary:
+        boundary: SafetyBoundary = {
+            "policy": self._config.safety_policy,
+            "stop_mode": self._config.stop_mode,
+            "adapter_name": adapter_name,
+            "smolvla_backend": smolvla_backend,
+            "checked_stages": list(dict.fromkeys(checked_stages or [])),
+            "estop_engaged": estop_engaged,
+            "manual_reset_required": self._config.stop_mode == "estop_latched",
+            "action_timeout_s": self._config.action_timeout_s,
+            "communication_retries": self._config.communication_retries,
+        }
+        if stop_reason:
+            boundary["stop_reason"] = stop_reason
+        return boundary

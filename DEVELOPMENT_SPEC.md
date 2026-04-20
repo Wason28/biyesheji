@@ -27,7 +27,8 @@
    - `docs/specs/05-decision-spec.md`
    - `docs/specs/06-execution-spec.md`
    - `docs/specs/07-frontend-spec.md`
-10. 需要追溯历史事实时再读：
+10. 若任务涉及 Ubuntu 部署或运行验证，再读 `docs/specs/11-ubuntu-runbook.md`
+11. 需要追溯历史事实时再读：
    - `docs/records/DEVELOPMENT_LOG.md`
    - `docs/records/TEST_REPORT.md`
    - `docs/records/HANDOFF.md`
@@ -72,6 +73,11 @@
 
 - `docs/specs/10-thesis-spec.md`
 - 定义论文映射、论文 Agent 职责和阶段性产出。
+
+### 3.8 Ubuntu 运行规范
+
+- `docs/specs/11-ubuntu-runbook.md`
+- 定义 Ubuntu 目标环境下当前 mock CLI 最小安装、运行与验证边界。
 
 ## 4. docs 目录边界
 
