@@ -15,9 +15,9 @@
 | `move_home` | 返回预设初始位置 | 无 | 读取预设关节角度 |
 | `grasp` | 闭合夹爪 | `force` | 调用夹爪驱动接口 |
 | `release` | 打开夹爪 | 无 | 调用夹爪驱动接口 |
-| `run_smolvla` | 执行抓取技能 | `task_description`, `current_image`, `robot_state` | 模型推理 + 动作序列执行 |
+| `run_smolvla` | 执行基于 `SmolVLA` 的抓取技能 | `task_description`, `current_image`, `robot_state` | 模型推理 + 动作序列执行 |
 
-## 3. SmolVLA 约束
+## 3. `SmolVLA` 约束
 
 - `SmolVLA` 为固定核心执行技能。
 - 当前版本不在前端提供切换入口。
@@ -30,7 +30,7 @@
 1. 接收任务描述、当前图像、机器人状态。
 2. 加载或获取当前 `SmolVLA` 模型实例。
 3. 生成动作序列。
-4. 调用 `robot.send_action()` 逐帧发送动作。
+4. 通过机器人接口逐帧发送动作。
 5. 返回执行结果状态。
 
 ## 5. 安全要求
@@ -49,4 +49,4 @@
 
 - 原子工具必须支持独立测试。
 - `run_smolvla` 必须支持模拟输入测试。
-- 至少记录一次真实机械臂联调结果。
+- 真实机械臂联调结果应记录到 `docs/records/EXPERIMENTS.md` 或 `docs/records/TEST_REPORT.md`。

@@ -2,11 +2,11 @@
 
 ## 1. 文档目的
 
-本文档定义对照 spec 执行开发的协作 Agent Team。这里的 Agent Team 是开发团队分工，不是系统运行时 Agent 本身。
+本文档定义对照需求文档和 `docs/specs/` 执行开发的协作 Agent Team。这里的 Agent Team 是开发团队分工，不是系统运行时 Agent 本身。
 
 ## 2. 团队总原则
 
-- 所有 Agent 必须先读需求文档和 spec，再开始改动代码或文档。
+- 所有 Agent 必须先读需求文档，再读当前任务对应的 `docs/specs/`，然后开始改动代码或文档。
 - 所有 Agent 的输出必须可交接、可复现、可回溯到需求文档。
 - 所有 Agent 在结束工作前必须同步更新开发记录、当前状态和相关配套文档。
 
@@ -17,7 +17,7 @@
 职责：
 - 拆解任务、安排优先级、管理里程碑推进。
 - 协调其他 Agent 的工作顺序和交接。
-- 检查本轮产出是否符合需求文档与 spec。
+- 检查本轮产出是否符合需求文档与 `specs`。
 
 ### 3.2 Architect Agent
 
@@ -38,7 +38,7 @@
 职责：
 - 负责感知层实现。
 - 落地 `get_image`、`get_robot_state`、`describe_scene`。
-- 维护 VLM 接入和感知结构化输出。
+- 维护 VLM 接入和感知输出合同。
 
 ### 3.5 Execution Agent
 
@@ -70,7 +70,7 @@
 ### 3.9 Documentation Agent
 
 职责：
-- 维护规范文档、接口文档、开发记录、交接文档和当前状态文档。
+- 维护规范文档、开发记录、交接文档和当前状态文档。
 - 保证文档与实现同步。
 
 ### 3.10 Thesis Agent
@@ -97,3 +97,10 @@
 - 未完成项
 - 风险项
 - 建议下一步
+
+每个 Agent 完成工作后还必须检查并维护相关文档：
+- 状态变更时更新 `docs/records/CURRENT_STATUS.md`
+- 开发事实变更时更新 `docs/records/DEVELOPMENT_LOG.md` 与 `docs/records/HANDOFF.md`
+- 架构、接口、流程或模块边界变更时更新对应 `docs/specs/`
+- 测试事实变更时更新 `docs/records/TEST_REPORT.md`
+- 若工作影响里程碑、实验或论文材料，还必须同步检查 `docs/records/MILESTONES.md`、`docs/records/EXPERIMENTS.md`、`docs/records/THESIS_PROGRESS.md`、`docs/records/FIGURE_ASSETS.md`

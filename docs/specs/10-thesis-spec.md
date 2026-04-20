@@ -40,7 +40,7 @@
 
 ## 6. 必备论文文档
 
-- `docs/reference/THESIS_OUTLINE.md`
+- `docs/specs/10-thesis-spec.md`
 - `docs/records/THESIS_PROGRESS.md`
 - `docs/records/EXPERIMENTS.md`
 - `docs/records/FIGURE_ASSETS.md`

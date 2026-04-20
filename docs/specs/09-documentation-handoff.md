@@ -6,28 +6,29 @@
 
 ## 2. 接手顺序
 
-新 Agent 接手时必须按以下顺序阅读：
+新 Agent 接手时按以下顺序阅读：
 1. `# 桌面级具身智能机器人感知-决策-执行一体化原型系统需求文档.md`
-2. `DEVELOPMENT_SPEC.md`
-3. `docs/SESSION_START.md`
-4. `docs/README.md`
-5. `docs/reference/ARCHITECTURE.md`
-6. `docs/reference/INTERFACES.md`
-7. `docs/records/CURRENT_STATUS.md`
-8. `docs/records/DEVELOPMENT_LOG.md`
-9. `docs/records/THESIS_PROGRESS.md`
+2. `docs/SESSION_START.md`
+3. `docs/records/CURRENT_STATUS.md`
+4. 与当前任务对应的 `docs/specs/`
+5. 需要追溯历史事实时再读 `docs/records/DEVELOPMENT_LOG.md`、`docs/records/TEST_REPORT.md`
 
 ## 3. 必备文档
 
 - `# 桌面级具身智能机器人感知-决策-执行一体化原型系统需求文档.md`
 - `README.md`
-- `DEVELOPMENT_SPEC.md`
-- `docs/SESSION_START.md`
 - `docs/README.md`
-- `docs/reference/ARCHITECTURE.md`
-- `docs/reference/INTERFACES.md`
-- `docs/reference/GIT_WORKFLOW.md`
-- `docs/reference/THESIS_OUTLINE.md`
+- `docs/SESSION_START.md`
+- `docs/specs/01-project-baseline.md`
+- `docs/specs/02-agent-team.md`
+- `docs/specs/03-system-architecture.md`
+- `docs/specs/04-perception-spec.md`
+- `docs/specs/05-decision-spec.md`
+- `docs/specs/06-execution-spec.md`
+- `docs/specs/07-frontend-spec.md`
+- `docs/specs/08-milestones-data-test.md`
+- `docs/specs/09-documentation-handoff.md`
+- `docs/specs/10-thesis-spec.md`
 - `docs/records/CURRENT_STATUS.md`
 - `docs/records/MILESTONES.md`
 - `docs/records/DEVELOPMENT_LOG.md`
@@ -53,32 +54,27 @@
 ## 5. 交接要求
 
 每轮工作结束前至少更新：
-- `CURRENT_STATUS`
-- `DEVELOPMENT_LOG`
-- `HANDOFF`
-
-如有影响，还必须更新：
-- `MILESTONES`
-- `ARCHITECTURE`
-- `INTERFACES`
-- `TEST_REPORT`
-- `THESIS_PROGRESS`
-- `EXPERIMENTS`
-
-推荐使用的实际路径：
 - `docs/records/CURRENT_STATUS.md`
 - `docs/records/DEVELOPMENT_LOG.md`
 - `docs/records/HANDOFF.md`
+
+如有影响，还必须更新：
 - `docs/records/MILESTONES.md`
-- `docs/reference/ARCHITECTURE.md`
-- `docs/reference/INTERFACES.md`
+- 对应 `docs/specs/`
 - `docs/records/TEST_REPORT.md`
 - `docs/records/THESIS_PROGRESS.md`
 - `docs/records/EXPERIMENTS.md`
+- `docs/records/FIGURE_ASSETS.md`
+
+工作完成后的文档维护要求：
+- 完成代码实现后，必须检查 `README.md`、`docs/SESSION_START.md`、`docs/records/CURRENT_STATUS.md` 和对应 `docs/specs/` 是否仍与当前实现一致。
+- 完成测试或验证后，必须同步更新 `docs/records/TEST_REPORT.md`；若阶段判断变化，还必须同步更新 `docs/records/CURRENT_STATUS.md`、`docs/records/MILESTONES.md` 和 `docs/records/HANDOFF.md`。
+- 完成影响论文事实材料的工作后，必须评估是否需要同步更新 `docs/records/THESIS_PROGRESS.md`、`docs/records/EXPERIMENTS.md` 和 `docs/records/FIGURE_ASSETS.md`。
+- 如果本轮工作未更新上述文档，交接时必须明确说明原因和待补项。
 
 ## 6. 冲突处理原则
 
 若发现文档、代码和需求文档不一致：
 1. 先核对需求文档
-2. 再核对当前实现
+2. 再核对当前实现或当前真实记录
 3. 最后统一修正文档和记录

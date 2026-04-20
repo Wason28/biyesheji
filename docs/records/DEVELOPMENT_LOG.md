@@ -50,6 +50,39 @@
 - 下一步建议：在保持工具签名稳定的前提下替换底层 mock 适配器，并补充更完整的异常场景测试
 - 对应论文章节：执行层设计、安全机制设计、VLA 调用链路设计
 
+### 2026-04-20
+
+- 负责 Agent：Orchestrator / Decision / QA / Documentation / Thesis Agent Team
+- 对应里程碑：第一阶段骨架实现后的统一入口与最小集成验证
+- 修改模块：`src/embodied_agent/app.py` / `tests/test_app_phase1.py` / `docs/`
+- 修改内容：新增统一启动入口 `src/embodied_agent/app.py`，以薄装配层形式完成 `config loading -> mock MCP service wiring -> decision execution`；通过 `PerceptionMCPServer`、`MockMCPServer` 与 `MinimalMCPClient(auto_mock=False)` 适配现有决策图；新增 `tests/test_app_phase1.py` 验证统一入口装配后的单任务 mock 闭环；执行 `uv run pytest -q` 与 `uv run python -m embodied_agent.app --instruction "抓取桌面方块"` 均通过；同步更新运行说明、状态记录和文档口径
+- 对应需求点：系统应具备最小可运行的三层闭环装配入口、跨层调用验证事实和可交接的运行方式
+- 风险和遗留问题：当前统一入口仍基于 in-process mock MCP facade，不代表真实 MCP 传输、前端联动、Ubuntu 部署或真实硬件链路已验证；`uv.lock` 是否纳入版本管理仍未决策
+- 下一步建议：补失败路径与多任务路径的跨层集成测试，继续完善 Ubuntu 运行文档，并为真实模型/硬件替换保持接口稳定
+- 对应论文章节：系统架构设计、决策层 Agent 设计、系统实现与验证
+
+### 2026-04-20
+
+- 负责 Agent：Implementation / Documentation Agent
+- 对应里程碑：第一阶段骨架实现后的环境验证与文档对齐
+- 修改模块：本地运行环境 / `tests/` / `docs/`
+- 修改内容：修复本地 `python` / `python3` 命令指向错误的问题，建立可用的 `Python 3.12.12` 本地入口；创建 `.venv` 并使用 `uv` 安装项目依赖；执行 `uv run pytest -q`，结果 6 个测试全部通过；同步修正 `README.md`、`docs/reference/`、`docs/specs/`、`docs/records/` 中与当前实现不一致的状态与接口描述，并补充“工作完成后的文档维护要求”
+- 对应需求点：项目应具备可验证的第一阶段骨架基线、文档与实现一致性、可交接与可复现性
+- 风险和遗留问题：当前测试仍以 mock 单元测试为主，尚未覆盖统一启动入口、跨层集成、前端联动与真实硬件场景；仓库当前新增 `uv.lock`，是否纳入版本管理尚未决策
+- 下一步建议：优先建立统一启动入口，串起配置加载、决策图执行和 mock MCP 服务，并补跨层集成测试
+- 对应论文章节：系统实现与验证、测试设计与结果分析、工程化与交接规范
+
+### 2026-04-20
+
+- 负责 Agent：Documentation / Thesis Agent
+- 对应里程碑：第一阶段完成后的文档体系重构
+- 修改模块：`README.md` / `DEVELOPMENT_SPEC.md` / `docs/specs/` / `docs/records/`
+- 修改内容：以根需求文档为唯一权威来源重构 `docs/`；保留 `docs/specs/` 作为实现规范层，删除重复的 `docs/reference/`，并重写导航、状态、交接、里程碑、论文与实验材料相关文档，确保论文材料与项目记录口径对齐
+- 对应需求点：文档体系应可交接、可回溯，并与需求文档和当前实现保持一致
+- 风险和遗留问题：`docs/records/TEST_REPORT.md`、`docs/records/MILESTONES.md`、`docs/records/HANDOFF.md` 仍保留 `6 个测试` 与 `7 个测试` 的历史口径差异，后续需要在核实后统一说明；`.claude/` 与 `uv.lock` 是否纳入版本管理仍未决策
+- 下一步建议：核实测试总数口径后补充勘误说明，并继续保持 `specs`、`records` 与后续实现同步更新
+- 对应论文章节：系统架构设计、系统实现与验证、论文材料组织与答辩准备
+
 ### 2026-04-19
 
 - 负责 Agent：Implementation / Documentation Agent

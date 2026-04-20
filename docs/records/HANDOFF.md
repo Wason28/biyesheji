@@ -2,56 +2,30 @@
 
 ## 当前交接状态
 
-- 日期：2026-04-19
-- 当前负责人 Agent：Documentation Maintainer
-- 当前阶段：第一阶段骨架实现完成
+- 日期：2026-04-20
+- 当前阶段：第一阶段骨架实现完成，已完成统一启动入口与最小跨层集成验证
 
-## 已完成
+## 本轮新增事实
 
-- 已完成 `src/embodied_agent/` 三层骨架搭建，包含 `decision/`、`perception/`、`execution/`
-- 已完成 `src/embodied_agent/shared/config.py` 与共享类型基础设施，形成跨层统一配置入口
-- 已新增决策层 mock 主循环，实现 LangGraph 固定图与最小 MCP Client 适配
-- 已新增感知层 mock 实现，支持场景描述、图像获取失败回传与统一错误载荷
-- 已新增执行层 mock 实现，支持参数校验、安全检查、急停保护与 `run_smolvla`
-- 已新增 6 个 pytest 测试，并通过 `python -m pytest tests -q`
+- 本地 `python` / `python3` 命令已修复为可用的 `Python 3.12.12`
+- 已创建项目虚拟环境 `.venv` 并完成依赖安装
+- 已执行 `uv run pytest -q`，结果为 7 个测试全部通过
+- 已新增统一启动入口 `src/embodied_agent/app.py`
+- 已新增跨层最小集成测试 `tests/test_app_phase1.py`
+- 已验证 `uv run python -m embodied_agent.app --instruction "抓取桌面方块"` 可完成 mock 闭环
+- 已完成 `README.md`、`docs/specs/`、`docs/records/` 主要文档对齐
+- 已在规范文档中加入工作完成后的文档维护要求
 
-## 正在进行
+## 交接提醒
 
-- 以 mock 骨架稳定三层模块边界、接口契约与测试基线
-- 为真实模型、真实硬件和后续前端联调预留替换入口
-
-## 阻塞问题
-
-- 当前仅完成 mock 骨架，尚未接入真实 LLM、VLM、SmolVLA 模型与真实机械臂
-- 尚未形成统一启动入口、端到端运行脚本和真实 MCP 联调记录
-- Ubuntu 环境准备与依赖安装文档尚未单独整理
-
-## 风险提醒
-
-- 如果后续真实实现直接替换 mock 但不保持当前接口签名，现有测试基线会失效
-- 如果三层模块代码继续演进但 records/reference 文档不同步，交接会再次失真
-- 当前测试通过只说明第一阶段骨架成立，不代表真实机器人动作链路可用
+- 下一位接手者先读 `# 桌面级具身智能机器人感知-决策-执行一体化原型系统需求文档.md`
+- 再读 `docs/records/CURRENT_STATUS.md`
+- 再进入与当前任务相关的 `docs/specs/`
+- 如需追溯历史事实，优先看 `docs/records/DEVELOPMENT_LOG.md` 和 `docs/records/TEST_REPORT.md`
 
 ## 推荐下一步
 
-1. 建立统一运行入口，串起配置加载、决策图执行和 mock MCP 服务。
-2. 补跨层集成测试，验证决策层到感知层、执行层的真实调用顺序和返回约束。
-3. 细化接口契约，确保 mock 实现可平滑替换为真实模型与硬件适配器。
-4. 开始建立 Ubuntu 环境安装与运行说明。
-
-## 必读文档
-
-- `# 桌面级具身智能机器人感知-决策-执行一体化原型系统需求文档.md`
-- `DEVELOPMENT_SPEC.md`
-- `docs/README.md`
-- `docs/specs/01-project-baseline.md`
-- `docs/specs/09-documentation-handoff.md`
-- `docs/reference/ARCHITECTURE.md`
-- `docs/reference/INTERFACES.md`
-- `docs/records/CURRENT_STATUS.md`
-- `docs/records/TEST_REPORT.md`
-
-## 最近一次交接说明
-
-本次交接已从“文档准备”切换到“第一阶段骨架落地”。
-下一位接手者可以直接在现有 `src/embodied_agent/` 骨架上推进统一入口、集成联调与真实适配替换，无需再从目录结构和测试基线重新起步。
+1. 在统一入口基础上补失败路径、多任务路径和配置路径的跨层集成测试。
+2. 继续细化接口契约，确保 mock 实现可平滑替换为真实模型与硬件适配器。
+3. 建立 Ubuntu 环境安装、运行与验证说明。
+4. 开始设计前端到决策层的调用链路与状态回传方式。
