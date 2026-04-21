@@ -25,12 +25,14 @@ type StreamStatus = "idle" | "connecting" | "live" | "closed" | "error";
 interface WorkbenchState {
   runtimeBaseUrl: string;
   instruction: string;
+  requestedRunId: string;
   bootstrapStatus: AsyncStatus;
   configStatus: AsyncStatus;
   toolsStatus: AsyncStatus;
   runStatus: AsyncStatus;
   streamStatus: StreamStatus;
   latestError: string;
+  latestErrorCode: string;
   streamNotice: string;
   activeConfigTab: ConfigSectionKey;
   bootstrap: FrontendBootstrapPayload | null;
@@ -47,6 +49,7 @@ interface WorkbenchState {
   submitRun: () => Promise<void>;
   syncRunSnapshot: () => Promise<void>;
   setInstruction: (value: string) => void;
+  setRequestedRunId: (value: string) => void;
   clearInstruction: () => void;
   setActiveConfigTab: (tab: ConfigSectionKey) => void;
   disconnectStream: () => void;
@@ -76,12 +79,14 @@ function upsertRunEvent(
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   runtimeBaseUrl,
   instruction: "",
+  requestedRunId: "",
   bootstrapStatus: "idle",
   configStatus: "idle",
   toolsStatus: "idle",
   runStatus: "idle",
   streamStatus: "idle",
   latestError: "",
+  latestErrorCode: "",
   streamNotice: "等待启动 run 以建立事件订阅。",
   activeConfigTab: "decision",
   bootstrap: null,
@@ -98,6 +103,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       configStatus: "loading",
       toolsStatus: "loading",
       latestError: "",
+      latestErrorCode: "",
     });
     try {
       const [bootstrap, config, toolsPayload] = await Promise.all([
@@ -113,6 +119,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         configStatus: "ready",
         toolsStatus: "ready",
         latestError: "",
+        latestErrorCode: "",
       });
     } catch (error) {
       const message =
@@ -122,6 +129,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         configStatus: "error",
         toolsStatus: "error",
         latestError: message,
+        latestErrorCode: error instanceof RuntimeRequestError ? error.code : "BootstrapLoadFailed",
       });
     }
   },
@@ -129,6 +137,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     set({
       configStatus: "loading",
       latestError: "",
+      latestErrorCode: "",
     });
     try {
       const config = await getConfig();
@@ -142,6 +151,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set({
         configStatus: "error",
         latestError: message,
+        latestErrorCode: error instanceof RuntimeRequestError ? error.code : "ConfigRefreshFailed",
       });
     }
   },
@@ -149,6 +159,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     set({
       toolsStatus: "loading",
       latestError: "",
+      latestErrorCode: "",
     });
     try {
       const payload = await getTools();
@@ -162,14 +173,17 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set({
         toolsStatus: "error",
         latestError: message,
+        latestErrorCode: error instanceof RuntimeRequestError ? error.code : "ToolsRefreshFailed",
       });
     }
   },
   async submitRun() {
     const instruction = get().instruction.trim();
+    const requestedRunId = get().requestedRunId.trim();
     if (!instruction) {
       set({
         latestError: "请输入任务指令后再启动。",
+        latestErrorCode: "InvalidInstruction",
       });
       return;
     }
@@ -179,6 +193,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       runStatus: "loading",
       streamStatus: "connecting",
       latestError: "",
+      latestErrorCode: "",
       streamNotice: "正在创建 run 并订阅 snapshot 事件。",
       runAccepted: null,
       latestRunState: null,
@@ -187,11 +202,12 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     });
 
     try {
-      const accepted = await startRun(instruction);
+      const accepted = await startRun(instruction, requestedRunId || undefined);
       set({
         runAccepted: accepted,
         snapshot: accepted.run,
         runStatus: "ready",
+        latestErrorCode: "",
         streamNotice: "run 已接受，正在连接事件流。",
       });
       await get().syncRunSnapshot();
@@ -246,6 +262,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         runStatus: "error",
         streamStatus: "error",
         latestError: message,
+        latestErrorCode: error instanceof RuntimeRequestError ? error.code : "RunStartFailed",
         streamNotice: "run 创建失败，未建立事件订阅。",
       });
     }
@@ -270,6 +287,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         error instanceof RuntimeRequestError ? error.message : "同步 run 快照失败";
       set({
         latestError: message,
+        latestErrorCode: error instanceof RuntimeRequestError ? error.code : "RunSnapshotSyncFailed",
       });
     }
   },
@@ -278,9 +296,15 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       instruction: value,
     });
   },
+  setRequestedRunId(value) {
+    set({
+      requestedRunId: value,
+    });
+  },
   clearInstruction() {
     set({
       instruction: "",
+      requestedRunId: "",
     });
   },
   setActiveConfigTab(tab) {

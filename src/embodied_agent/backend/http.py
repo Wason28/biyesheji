@@ -48,6 +48,11 @@ class BackendHTTPApp:
                 return self._respond(start_response, 200, self.facade.get_config())
             if method == "GET" and path == "/api/v1/runtime/tools":
                 return self._respond(start_response, 200, self.facade.get_tools())
+            if method == "POST" and path == "/api/v1/runtime/tools/refresh":
+                return self._respond(start_response, 200, self.facade.refresh_tools())
+            if method == "PUT" and path == "/api/v1/runtime/config":
+                payload = self._read_json_body(environ)
+                return self._respond(start_response, 200, self.facade.update_config(payload))
             if method == "POST" and path == "/api/v1/runtime/run":
                 payload = self._read_json_body(environ)
                 instruction = self._extract_instruction(payload)

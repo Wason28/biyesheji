@@ -18,12 +18,15 @@ function renderStatusLabel(status: string | undefined) {
 
 export function ControlPanel() {
   const instruction = useWorkbenchStore((state) => state.instruction);
+  const requestedRunId = useWorkbenchStore((state) => state.requestedRunId);
   const bootstrapStatus = useWorkbenchStore((state) => state.bootstrapStatus);
   const snapshot = useWorkbenchStore((state) => state.snapshot);
   const runAccepted = useWorkbenchStore((state) => state.runAccepted);
   const runStatus = useWorkbenchStore((state) => state.runStatus);
   const latestError = useWorkbenchStore((state) => state.latestError);
+  const latestErrorCode = useWorkbenchStore((state) => state.latestErrorCode);
   const setInstruction = useWorkbenchStore((state) => state.setInstruction);
+  const setRequestedRunId = useWorkbenchStore((state) => state.setRequestedRunId);
   const clearInstruction = useWorkbenchStore((state) => state.clearInstruction);
   const submitRun = useWorkbenchStore((state) => state.submitRun);
   const initialize = useWorkbenchStore((state) => state.initialize);
@@ -61,6 +64,16 @@ export function ControlPanel() {
           />
         </label>
 
+        <label className="field">
+          <span>自定义 run_id（可选）</span>
+          <input
+            className="text-input"
+            value={requestedRunId}
+            onChange={(event) => setRequestedRunId(event.target.value)}
+            placeholder="示例：run-demo-001"
+          />
+        </label>
+
         <div className="button-row">
           <button type="button" onClick={() => void submitRun()} disabled={!canSubmit}>
             发送任务
@@ -70,7 +83,12 @@ export function ControlPanel() {
           </button>
         </div>
 
-        {latestError ? <div className="alert alert-error">{latestError}</div> : null}
+        {latestError ? (
+          <div className="alert alert-error">
+            <div>{latestError}</div>
+            {latestErrorCode ? <code className="inline-code">{latestErrorCode}</code> : null}
+          </div>
+        ) : null}
 
         <div className="key-value-grid">
           <div className="kv-card">

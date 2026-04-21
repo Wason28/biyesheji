@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from ..decision.state import create_initial_state, set_last_node_result
+from ..execution.server import build_server
 from .contracts import (
     FrontendBootstrapPayload,
     FrontendConfigPayload,
@@ -46,6 +47,57 @@ class FrontendRuntimeFacade:
 
     def get_tools(self) -> FrontendToolsPayload:
         return build_frontend_tools_payload(self.runtime)
+
+    def refresh_tools(self) -> FrontendToolsPayload:
+        return build_frontend_tools_payload(self.runtime)
+
+    def update_config(self, payload: dict[str, object]) -> FrontendConfigPayload:
+        runtime_config = self.runtime.config
+        decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
+        perception = payload.get("perception") if isinstance(payload.get("perception"), dict) else {}
+        execution = payload.get("execution") if isinstance(payload.get("execution"), dict) else {}
+        frontend = payload.get("frontend") if isinstance(payload.get("frontend"), dict) else {}
+
+        for field_name in ("llm_provider", "llm_model", "llm_api_key", "llm_local_path", "max_iterations"):
+            if field_name in decision:
+                setattr(runtime_config.decision, field_name, decision[field_name])
+        for field_name in (
+            "vlm_provider",
+            "vlm_model",
+            "vlm_api_key",
+            "vlm_local_path",
+            "vlm_base_url",
+            "camera_backend",
+            "camera_device_id",
+            "camera_frame_id",
+            "camera_width",
+            "camera_height",
+            "robot_state_backend",
+            "robot_state_base_frame",
+        ):
+            if field_name in perception:
+                setattr(runtime_config.perception, field_name, perception[field_name])
+        for field_name in (
+            "vla_model_path",
+            "robot_config",
+            "robot_adapter",
+            "smolvla_backend",
+            "safety_policy",
+            "stop_mode",
+            "workspace_limits",
+            "home_pose",
+        ):
+            if field_name in execution:
+                setattr(runtime_config.execution, field_name, execution[field_name])
+        for field_name in ("port", "max_iterations", "speed_scale"):
+            if field_name in frontend:
+                setattr(runtime_config.frontend, field_name, frontend[field_name])
+
+        self.runtime.perception.reload_runtime(runtime_config)
+        self.runtime.execution = build_server(runtime_config)
+        self.runtime.mcp_client = self.runtime.mcp_client.__class__(self.runtime.perception, self.runtime.execution)
+        self.runtime.decision = type(self.runtime.decision).from_config(runtime_config, mcp_client=self.runtime.mcp_client)
+        return build_frontend_config_payload(self.runtime)
 
     def get_runtime_api(self) -> FrontendRuntimeAPI:
         return build_frontend_runtime_api(self.runtime)

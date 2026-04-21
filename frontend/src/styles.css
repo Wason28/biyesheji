@@ -60,9 +60,27 @@ textarea {
   padding: 1rem;
 }
 
+.text-input {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(133, 158, 194, 0.24);
+  background: rgba(7, 16, 28, 0.82);
+  color: inherit;
+  padding: 0.85rem 1rem;
+}
+
 code,
 pre {
   font-family: "Cascadia Code", "Consolas", monospace;
+}
+
+.inline-code {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 #root {

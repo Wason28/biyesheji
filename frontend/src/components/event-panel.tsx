@@ -46,6 +46,11 @@ export function EventPanel() {
         </div>
 
         <div className="alert alert-info">{streamNotice}</div>
+        {streamStatus === "error" ? (
+          <div className="alert alert-error">
+            事件流暂时不可用，当前保留最近一次有效快照，可手动触发“同步快照”继续对齐状态。
+          </div>
+        ) : null}
 
         <div className="config-table">
           <div className="config-row">

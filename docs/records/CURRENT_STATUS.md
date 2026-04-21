@@ -5,16 +5,16 @@
 - 唯一权威来源：`# 桌面级具身智能机器人感知-决策-执行一体化原型系统需求文档.md`
 - docs 导航：`docs/README.md`
 - 目标部署环境：`Ubuntu`
-- 最近更新时间：2026-04-20
+- 最近更新时间：2026-04-21
 
 ## 当前阶段判断
 
-当前项目已完成第一阶段骨架实现与第二阶段主线收敛。第三阶段当前已从“前端工程骨架已落地并构建通过”进一步收敛到“前端已补齐 config 消费、`snapshot_url` 兜底同步、初始化重试入口，并保持构建通过”的状态。当前前端已能够围绕既有 `bootstrap / config / tools / runs / events` 合同完成初始化、配置展示、任务提交、快照同步和 SSE 订阅占位；但这仍不等于真实浏览器联调、生产级流式服务或端到端闭环已完成。
+当前项目已完成第一阶段骨架实现与第二阶段主线收敛。第三阶段当前已从“前端工程骨架已落地并构建通过”进一步收敛到“前端已补齐 config 消费、`snapshot_url` 兜底同步、初始化重试入口，并新增可选 `run_id` 输入、错误码展示与事件流错误提示”的状态。当前前端已能够围绕既有 `bootstrap / config / tools / runs / events` 合同完成初始化、配置展示、任务提交、快照同步和 SSE 订阅占位；但这仍不等于真实浏览器联调、生产级流式服务或端到端闭环已完成。与此同时，后端已出现 `PUT /config` 与 `POST /tools/refresh` 的新增接口草稿，但这两项能力当前仍未完成前后端合同闭环与本地复验。
 
 ## 当前里程碑
 
-- 当前阶段：第三阶段已启动，当前处于“前端消费边界已补强，第三轮文档再次同步完成”的状态
-- 当前主线：冻结前端消费合同，优先补浏览器联调记录、最小验收闭环与截图证据
+- 当前阶段：第三阶段已启动，当前处于“前端消费边界继续补强，未提交改动已推进到 `run_id` / 错误展示，但后端新增配置写回草稿尚未收口”的状态
+- 当前主线：冻结前端消费合同，优先补浏览器联调记录、最小验收闭环与截图证据，并先修平未提交改动里的后端收口问题
 
 ## 已完成
 
@@ -30,6 +30,8 @@
 - 已完成前端初始化失败兜底：任务面板在初始化失败时显式提示，并提供“重试初始化”入口
 - 已完成运行态快照兜底同步：run 受理后先通过 `snapshot_url` 主动同步一次快照，SSE 出错时再次尝试用 `snapshot_url` 对齐最新状态
 - 已建立 `frontend/src/lib/api.ts` 与 `frontend/src/lib/sse.ts`，支持同源 `/api` 代理或 `VITE_RUNTIME_BASE_URL`
+- 已补任务面板可选 `run_id` 输入、错误码回显与事件流错误提示
+- 已出现后端 `PUT /api/v1/runtime/config` 与 `POST /api/v1/runtime/tools/refresh` 的未提交接口草稿，并补入对应 phase3 草稿测试
 - 已执行 `python -m pytest tests -q`，当前为 67 个测试全部通过
 - 已执行 `npm run build`（目录：`frontend/`），结果通过，证明前端骨架在本轮补强后仍可完成静态构建
 
@@ -38,15 +40,16 @@
 - 决策层：可基于用户指令驱动 `task_planner -> scene_analyzer -> action_decider -> executor -> verifier` 固定流程
 - 感知层：保持 mock-first 能力，已收敛结构化 `scene_observations`、provider 元数据与错误边界
 - 执行层：可在 mock 运行时中执行 `move_to`、`move_home`、`grasp`、`release`、`run_smolvla`
-- 后端层：最小 HTTP / SSE 合同、`run_id` 生命周期、终态会话清理与非负事件游标约束已形成可测试基线，但仍是同步 WSGI + 进程内线程骨架
-- 前端层：`App.tsx` 组合五块工作区；`ConfigPanel` 已消费 `bootstrap + config` 双读取合同；`ControlPanel` 已提供初始化失败重试；`workbench.ts` 在 run 受理后和 SSE 异常时都会尝试 `snapshot_url` 兜底同步；事件面板继续按 `version` 去重并显式展示续连状态
-- 验证层：当前已有 67 个 pytest 测试通过；前端侧当前已完成构建验证，但尚未形成浏览器级自动化回归或手工联调留痕
+- 后端层：最小 HTTP / SSE 合同、`run_id` 生命周期、终态会话清理与非负事件游标约束已形成可测试基线，但仍是同步 WSGI + 进程内线程骨架；当前未提交改动里还出现了 `PUT /config` 与 `POST /tools/refresh` 的后端接口草稿，尚未完成收口
+- 前端层：`App.tsx` 组合五块工作区；`ConfigPanel` 已消费 `bootstrap + config` 双读取合同；`ControlPanel` 已提供初始化失败重试与可选 `run_id` 输入；`workbench.ts` 在 run 受理后和 SSE 异常时都会尝试 `snapshot_url` 兜底同步，并开始区分错误码；事件面板继续按 `version` 去重并显式展示续连状态与事件流错误提示；但前端当前仍未消费 `PUT /config` 与 `POST /tools/refresh` 新草稿接口
+- 验证层：历史基线为 67 个 pytest 测试通过；前端侧当前已完成构建验证，但本轮未提交改动尚未在当前环境重新复验，且尚未形成浏览器级自动化回归或手工联调留痕
 
 ## 主要缺口
 
 - 当前仍为 mock-first 骨架，尚未接入真实 VLM、真实 LLM、真实 `SmolVLA` 权重与真实机械臂
 - `backend/http.py` 仍采用标准库同步 WSGI 传输，`RunRegistry` 仍为进程内实现；真实 SSE / WebSocket、主动取消、持久化与跨进程会话治理尚未实现
-- 前端虽已补齐 config 消费、`snapshot_url` 兜底同步与初始化重试，但当前仍缺少浏览器手工联调记录、前端自动化测试与真实后端启动截图
+- 前端虽已补齐 config 消费、`snapshot_url` 兜底同步、初始化重试、可选 `run_id` 与错误态展示，但当前仍缺少浏览器手工联调记录、前端自动化测试与真实后端启动截图
+- 后端 `PUT /api/v1/runtime/config` 与 `POST /api/v1/runtime/tools/refresh` 当前仍是未收口草稿：前端未消费，配置写回字段合同与前端展示字段仍未完全对齐
 - 运行态视频区当前仅展示 `current_image` 占位；真实摄像头视频流与媒体资源治理尚未开始实现
 - Ubuntu 实机、前端联动、真实模型与真实硬件链路仍未验证
 - 端到端实体分拣测试、数据采集与微调流程尚未开始
