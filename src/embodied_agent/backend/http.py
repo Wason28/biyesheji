@@ -178,8 +178,9 @@ class BackendHTTPApp:
     @staticmethod
     def _encode_sse_event(event: dict[str, Any]) -> bytes:
         version = int(event.get("version", 0))
+        event_name = str(event.get("event", "snapshot"))
         payload = json.dumps(event, ensure_ascii=False)
-        return f"id: {version}\nevent: snapshot\ndata: {payload}\n\n".encode("utf-8")
+        return f"id: {version}\nevent: {event_name}\ndata: {payload}\n\n".encode("utf-8")
 
     @staticmethod
     def _match_run_snapshot_path(path: str) -> str | None:

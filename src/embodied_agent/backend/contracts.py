@@ -71,6 +71,7 @@ class FrontendRunStatePayload(TypedDict):
     run: FrontendRunSnapshot
     version: int
     terminal: bool
+    event: Literal["snapshot"]
 
 
 class FrontendRunAcceptedPayload(TypedDict):

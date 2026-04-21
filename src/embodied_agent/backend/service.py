@@ -88,6 +88,7 @@ class FrontendRuntimeFacade:
             "run": latest_event.run,
             "version": latest_event.version,
             "terminal": latest_event.terminal,
+            "event": "snapshot",
         }
 
     def iter_run_events(self, *, run_id: str, after_version: int = 0) -> list[FrontendRunStatePayload]:
@@ -96,6 +97,7 @@ class FrontendRuntimeFacade:
                 "run": event.run,
                 "version": event.version,
                 "terminal": event.terminal,
+                "event": "snapshot",
             }
             for event in self.run_registry.iter_events(run_id, after_version=after_version)
         ]
