@@ -10,3 +10,12 @@ dist/
 *.egg-info/
 .DS_Store
 Thumbs.db
+
+# Claude / local tooling
+.claude/
+
+# Frontend dependencies and build artifacts
+frontend/node_modules/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
