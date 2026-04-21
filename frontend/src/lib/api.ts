@@ -73,8 +73,24 @@ export function getConfig() {
   return requestJSON<FrontendConfigPayload>("/api/v1/runtime/config");
 }
 
+export function updateConfig(config: FrontendConfigPayload) {
+  return requestJSON<FrontendConfigPayload>("/api/v1/runtime/config", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(config),
+  });
+}
+
 export function getTools() {
   return requestJSON<FrontendToolsPayload>("/api/v1/runtime/tools");
+}
+
+export function refreshTools() {
+  return requestJSON<FrontendToolsPayload>("/api/v1/runtime/tools/refresh", {
+    method: "POST",
+  });
 }
 
 export function getRunState(path: string) {

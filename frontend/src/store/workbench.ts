@@ -5,14 +5,17 @@ import {
   getConfig,
   getRunState,
   getTools,
+  refreshTools as requestToolsRefresh,
   RuntimeRequestError,
   runtimeBaseUrl,
   startRun,
+  updateConfig,
 } from "../lib/api";
 import { createRuntimeEventSource } from "../lib/sse";
 import type {
   ConfigSectionKey,
   FrontendBootstrapPayload,
+  FrontendConfigPayload,
   FrontendRunAcceptedPayload,
   FrontendRunSnapshot,
   FrontendRunStatePayload,
@@ -31,12 +34,17 @@ interface WorkbenchState {
   toolsStatus: AsyncStatus;
   runStatus: AsyncStatus;
   streamStatus: StreamStatus;
+  configDraftStatus: AsyncStatus;
   latestError: string;
   latestErrorCode: string;
   streamNotice: string;
+  toolsNotice: string;
+  configNotice: string;
+  lastRunSummary: string;
   activeConfigTab: ConfigSectionKey;
   bootstrap: FrontendBootstrapPayload | null;
-  config: FrontendBootstrapPayload["config"] | null;
+  config: FrontendConfigPayload | null;
+  configDraft: FrontendConfigPayload | null;
   tools: FrontendToolDescriptor[];
   snapshot: FrontendRunSnapshot | null;
   runAccepted: FrontendRunAcceptedPayload | null;
@@ -46,10 +54,18 @@ interface WorkbenchState {
   initialize: () => Promise<void>;
   refreshConfig: () => Promise<void>;
   refreshTools: () => Promise<void>;
+  saveConfigDraft: () => Promise<void>;
+  resetConfigDraft: () => void;
   submitRun: () => Promise<void>;
   syncRunSnapshot: () => Promise<void>;
   setInstruction: (value: string) => void;
   setRequestedRunId: (value: string) => void;
+  updateConfigDraft: (
+    section: ConfigSectionKey,
+    field: string,
+    value: string | number,
+  ) => void;
+  updateHomePoseDraft: (axis: string, value: number) => void;
   clearInstruction: () => void;
   setActiveConfigTab: (tab: ConfigSectionKey) => void;
   disconnectStream: () => void;
@@ -76,6 +92,10 @@ function upsertRunEvent(
   return dedupeEvents([...currentEvents, nextEvent]);
 }
 
+function cloneConfig(config: FrontendConfigPayload | null) {
+  return config ? JSON.parse(JSON.stringify(config)) as FrontendConfigPayload : null;
+}
+
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   runtimeBaseUrl,
   instruction: "",
@@ -85,12 +105,17 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   toolsStatus: "idle",
   runStatus: "idle",
   streamStatus: "idle",
+  configDraftStatus: "idle",
   latestError: "",
   latestErrorCode: "",
   streamNotice: "等待启动 run 以建立事件订阅。",
+  toolsNotice: "当前工具列表来自 bootstrap / tools 合同。",
+  configNotice: "当前配置支持展示、编辑、提交与回滚。",
+  lastRunSummary: "尚未执行本地闭环 run。",
   activeConfigTab: "decision",
   bootstrap: null,
   config: null,
+  configDraft: null,
   tools: [],
   snapshot: null,
   runAccepted: null,
@@ -114,12 +139,15 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set({
         bootstrap,
         config,
+        configDraft: cloneConfig(config),
         tools: toolsPayload.tools,
         bootstrapStatus: "ready",
         configStatus: "ready",
         toolsStatus: "ready",
         latestError: "",
         latestErrorCode: "",
+        toolsNotice: `已加载 ${toolsPayload.tools.length} 个工具描述。`,
+        configNotice: "配置已加载，可按分区编辑后提交。",
       });
     } catch (error) {
       const message =
@@ -143,7 +171,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       const config = await getConfig();
       set({
         config,
+        configDraft: cloneConfig(config),
         configStatus: "ready",
+        configNotice: "已从后端刷新配置，并重置当前草稿。",
       });
     } catch (error) {
       const message =
@@ -162,10 +192,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       latestErrorCode: "",
     });
     try {
-      const payload = await getTools();
+      const payload = await requestToolsRefresh();
       set({
         tools: payload.tools,
         toolsStatus: "ready",
+        toolsNotice: `工具列表已刷新，当前共 ${payload.tools.length} 项。`,
       });
     } catch (error) {
       const message =
@@ -174,8 +205,45 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         toolsStatus: "error",
         latestError: message,
         latestErrorCode: error instanceof RuntimeRequestError ? error.code : "ToolsRefreshFailed",
+        toolsNotice: "工具刷新失败，当前保留最近一次成功结果。",
       });
     }
+  },
+  async saveConfigDraft() {
+    const configDraft = get().configDraft;
+    if (!configDraft) {
+      return;
+    }
+    set({
+      configDraftStatus: "loading",
+      latestError: "",
+      latestErrorCode: "",
+    });
+    try {
+      const config = await updateConfig(configDraft);
+      set({
+        config,
+        configDraft: cloneConfig(config),
+        configStatus: "ready",
+        configDraftStatus: "ready",
+        configNotice: "配置已提交并与后端完成同步。",
+      });
+    } catch (error) {
+      const message =
+        error instanceof RuntimeRequestError ? error.message : "提交配置失败";
+      set({
+        configDraftStatus: "error",
+        latestError: message,
+        latestErrorCode: error instanceof RuntimeRequestError ? error.code : "ConfigUpdateFailed",
+      });
+    }
+  },
+  resetConfigDraft() {
+    set((state) => ({
+      configDraft: cloneConfig(state.config),
+      configDraftStatus: "idle",
+      configNotice: "配置草稿已回滚到最近一次后端快照。",
+    }));
   },
   async submitRun() {
     const instruction = get().instruction.trim();
@@ -231,6 +299,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           streamNotice: payload.terminal
             ? "收到终态 snapshot，事件订阅已收口。"
             : `已收到版本 ${payload.version} 的 snapshot 事件。`,
+          lastRunSummary: payload.terminal
+            ? `最近一次 run 终态：${payload.run.status}（版本 ${payload.version}）。`
+            : state.lastRunSummary,
         }));
         if (payload.terminal) {
           source.close();
@@ -281,6 +352,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         streamNotice: payload.terminal
           ? "已通过 snapshot_url 同步到终态快照。"
           : `已通过 snapshot_url 同步到版本 ${payload.version}。`,
+        lastRunSummary: payload.terminal
+          ? `最近一次 run 终态：${payload.run.status}（版本 ${payload.version}）。`
+          : state.lastRunSummary,
       }));
     } catch (error) {
       const message =
@@ -299,6 +373,43 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   setRequestedRunId(value) {
     set({
       requestedRunId: value,
+    });
+  },
+  updateConfigDraft(section, field, value) {
+    set((state) => {
+      if (!state.configDraft) {
+        return {};
+      }
+      return {
+        configDraft: {
+          ...state.configDraft,
+          [section]: {
+            ...state.configDraft[section],
+            [field]: value,
+          },
+        },
+        configDraftStatus: "idle",
+      };
+    });
+  },
+  updateHomePoseDraft(axis, value) {
+    set((state) => {
+      if (!state.configDraft) {
+        return {};
+      }
+      return {
+        configDraft: {
+          ...state.configDraft,
+          execution: {
+            ...state.configDraft.execution,
+            home_pose: {
+              ...state.configDraft.execution.home_pose,
+              [axis]: value,
+            },
+          },
+        },
+        configDraftStatus: "idle",
+      };
     });
   },
   clearInstruction() {

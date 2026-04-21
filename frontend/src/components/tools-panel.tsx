@@ -4,6 +4,9 @@ import { useWorkbenchStore } from "../store/workbench";
 export function ToolsPanel() {
   const tools = useWorkbenchStore((state) => state.tools);
   const toolsStatus = useWorkbenchStore((state) => state.toolsStatus);
+  const toolsNotice = useWorkbenchStore((state) => state.toolsNotice);
+  const latestError = useWorkbenchStore((state) => state.latestError);
+  const latestErrorCode = useWorkbenchStore((state) => state.latestErrorCode);
   const refreshTools = useWorkbenchStore((state) => state.refreshTools);
 
   return (
@@ -27,6 +30,14 @@ export function ToolsPanel() {
             <strong>{tools.length}</strong>
           </div>
         </div>
+
+        <div className="alert alert-info">{toolsNotice}</div>
+        {toolsStatus === "error" && latestError ? (
+          <div className="alert alert-error">
+            <div>{latestError}</div>
+            {latestErrorCode ? <code className="inline-code">{latestErrorCode}</code> : null}
+          </div>
+        ) : null}
 
         <div className="tool-list">
           {tools.map((tool) => (

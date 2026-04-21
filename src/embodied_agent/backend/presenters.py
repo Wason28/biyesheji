@@ -70,22 +70,43 @@ def build_frontend_tools_payload(runtime: Phase1Runtime) -> FrontendToolsPayload
 def build_frontend_config_payload(runtime: Phase1Runtime) -> FrontendConfigPayload:
     execution_description = runtime.execution.describe()
     execution_model = execution_description["execution_model"]
+    decision_provider = runtime.config.decision.llm_provider
+    perception_provider = runtime.config.perception.vlm_provider
     return {
         "decision": {
-            "provider": runtime.config.decision.llm_provider,
+            "provider": decision_provider,
             "model": runtime.config.decision.llm_model,
             "provider_options": list(DECISION_LLM_PROVIDERS),
             "api_key": "",
             "api_key_configured": bool(runtime.config.decision.llm_api_key),
             "local_path": runtime.config.decision.llm_local_path,
+            "assistant": {
+                "title": "模型部署助手",
+                "status": "configured" if bool(runtime.config.decision.llm_api_key or runtime.config.decision.llm_local_path) else "attention",
+                "message": (
+                    f"当前决策模型使用 {decision_provider}，可继续填写 API Key 或本地路径完成部署。"
+                    if not (runtime.config.decision.llm_api_key or runtime.config.decision.llm_local_path)
+                    else f"当前决策模型 {runtime.config.decision.llm_model} 已具备基础部署条件。"
+                ),
+            },
         },
         "perception": {
-            "provider": runtime.config.perception.vlm_provider,
+            "provider": perception_provider,
             "model": runtime.config.perception.vlm_model,
             "provider_options": list(PERCEPTION_VLM_PROVIDERS),
             "api_key": "",
             "api_key_configured": bool(runtime.config.perception.vlm_api_key),
             "local_path": runtime.config.perception.vlm_local_path,
+            "assistant": {
+                "title": "系统载入助手",
+                "status": "ready",
+                "message": f"当前可选感知模型来源：{', '.join(PERCEPTION_VLM_PROVIDERS)}。",
+                "detected_models": [
+                    {"provider": "minimax", "model": runtime.config.decision.llm_model, "configured": bool(runtime.config.decision.llm_api_key or runtime.config.decision.llm_local_path)},
+                    {"provider": perception_provider, "model": runtime.config.perception.vlm_model, "configured": bool(runtime.config.perception.vlm_api_key or runtime.config.perception.vlm_local_path)},
+                    {"provider": execution_model["backend"], "model": execution_model["name"], "configured": True},
+                ],
+            },
         },
         "execution": {
             "display_name": execution_model["name"],

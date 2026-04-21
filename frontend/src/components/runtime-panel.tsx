@@ -5,25 +5,36 @@ function prettyJson(value: unknown) {
   return JSON.stringify(value || {}, null, 2);
 }
 
+function resolveImageSource(currentImage: string | undefined) {
+  if (!currentImage) {
+    return null;
+  }
+  if (currentImage.startsWith("data:image/") || currentImage.startsWith("http://") || currentImage.startsWith("https://")) {
+    return currentImage;
+  }
+  return `data:image/png;base64,${currentImage}`;
+}
+
 export function RuntimePanel() {
   const snapshot = useWorkbenchStore((state) => state.snapshot);
   const bootstrap = useWorkbenchStore((state) => state.bootstrap);
+  const imageSource = resolveImageSource(snapshot?.current_image);
 
   return (
     <PanelShell
       title="运行态快照"
-      subtitle="优先展示 run snapshot 字段、运行日志和视频流占位，保持与后端展示合同解耦。"
+      subtitle="优先展示 run snapshot 字段、运行日志和视频流承接区，保持与后端展示合同解耦。"
     >
       <div className="stack">
         <div className="video-placeholder">
           <div className="video-placeholder__overlay">
-            <span>{snapshot?.current_image ? "收到 current_image 字段" : "等待视频流合同"}</span>
+            <span>{imageSource ? "已承接 current_image 图像" : "等待视频流合同"}</span>
           </div>
           <div className="video-placeholder__body">
-            {snapshot?.current_image ? (
-              <code>{snapshot.current_image}</code>
+            {imageSource ? (
+              <img className="runtime-image" src={imageSource} alt="当前运行态图像" />
             ) : (
-              <p>当前后端未提供真实视频流 URL，先展示 current_image 占位与连接状态。</p>
+              <p>当前后端未提供真实视频流 URL，先承接 current_image 图像字段并保留视频流占位说明。</p>
             )}
           </div>
         </div>

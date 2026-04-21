@@ -21,7 +21,9 @@ body {
 }
 
 button,
-textarea {
+textarea,
+input,
+select {
   font: inherit;
 }
 
@@ -61,6 +63,15 @@ textarea {
 }
 
 .text-input {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(133, 158, 194, 0.24);
+  background: rgba(7, 16, 28, 0.82);
+  color: inherit;
+  padding: 0.85rem 1rem;
+}
+
+select {
   width: 100%;
   border-radius: 16px;
   border: 1px solid rgba(133, 158, 194, 0.24);
@@ -316,15 +327,99 @@ pre {
   color: #edf4ff;
 }
 
-.code-block {
-  margin: 0;
-  padding: 0.85rem;
+.config-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.field--span-2 {
+  grid-column: 1 / -1;
+}
+
+.readonly-card {
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  background: rgba(12, 27, 49, 0.72);
+  border: 1px solid rgba(98, 127, 173, 0.18);
+}
+
+.readonly-card p {
+  margin: 0.45rem 0 0;
+  color: #a9bedf;
+}
+
+.home-pose-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.assistant-card {
+  grid-column: 1 / -1;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(98, 127, 173, 0.18);
+  background: rgba(12, 27, 49, 0.72);
+}
+
+.assistant-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.assistant-card__header span {
+  color: #9db7dd;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.assistant-card p {
+  margin: 0.5rem 0 0;
+  color: #d6e3fb;
+}
+
+.assistant-card--attention {
+  border-color: rgba(255, 193, 7, 0.24);
+}
+
+.assistant-card--configured,
+.assistant-card--ready {
+  border-color: rgba(87, 152, 255, 0.24);
+}
+
+.assistant-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.assistant-model-item {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.7rem 0.85rem;
   border-radius: 14px;
-  background: rgba(4, 10, 20, 0.72);
-  color: #c8dcff;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow: auto;
+  background: rgba(7, 16, 28, 0.55);
+}
+
+.assistant-model-item span,
+.assistant-model-item em {
+  color: #9ab1d3;
+  font-style: normal;
+}
+
+.runtime-image {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 16px;
+  border: 1px solid rgba(98, 127, 173, 0.18);
+  background: rgba(7, 16, 28, 0.45);
 }
 
 .tool-list {
@@ -434,6 +529,11 @@ pre {
   }
 
   .config-row {
+    grid-template-columns: 1fr;
+  }
+
+  .config-form-grid,
+  .home-pose-grid {
     grid-template-columns: 1fr;
   }
 }

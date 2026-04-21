@@ -108,15 +108,55 @@ def test_backend_http_put_config_updates_runtime_view(app_config) -> None:
         "PUT",
         "/api/v1/runtime/config",
         {
-            "decision": {"llm_provider": "openai"},
-            "frontend": {"max_iterations": 6},
+            "decision": {
+                "provider": "openai",
+                "model": "gpt-4o-mini",
+                "api_key": "decision-secret",
+                "local_path": "/models/decision",
+            },
+            "perception": {
+                "provider": "openai_gpt4o",
+                "model": "gpt-4o",
+                "api_key": "perception-secret",
+                "local_path": "/models/perception",
+            },
+            "execution": {
+                "model_path": "./models/smolvla_updated",
+                "home_pose": {"x": 0.1, "y": 0.2, "z": 0.3},
+            },
+            "frontend": {"max_iterations": 6, "speed_scale": 0.6, "port": 9000},
         },
     )
     payload = json.loads(body.decode("utf-8"))
 
     assert status.startswith("200")
     assert payload["decision"]["provider"] == "openai"
+    assert payload["decision"]["model"] == "gpt-4o-mini"
+    assert payload["decision"]["api_key"] == ""
+    assert payload["decision"]["api_key_configured"] is True
+    assert payload["decision"]["local_path"] == "/models/decision"
+    assert payload["perception"]["provider"] == "openai_gpt4o"
+    assert payload["perception"]["model"] == "gpt-4o"
+    assert payload["perception"]["api_key"] == ""
+    assert payload["perception"]["api_key_configured"] is True
+    assert payload["execution"]["model_path"] == "./models/smolvla_updated"
+    assert payload["execution"]["home_pose"] == {"x": 0.1, "y": 0.2, "z": 0.3}
     assert payload["frontend"]["max_iterations"] == 6
+    assert payload["frontend"]["speed_scale"] == 0.6
+    assert payload["frontend"]["port"] == 9000
+
+
+def test_backend_bootstrap_config_exposes_assistant_metadata(app_config) -> None:
+    runtime = build_runtime(app_config)
+    app = build_http_app_from_runtime(runtime)
+
+    status, _, body = _request(app, "GET", "/api/v1/runtime/bootstrap")
+    payload = json.loads(body.decode("utf-8"))
+
+    assert status.startswith("200")
+    assert payload["config"]["decision"]["assistant"]["title"] == "模型部署助手"
+    assert payload["config"]["perception"]["assistant"]["title"] == "系统载入助手"
+    assert payload["config"]["perception"]["assistant"]["detected_models"]
 
 
 def test_backend_http_events_support_last_event_id_and_after_version(app_config) -> None:

@@ -89,9 +89,37 @@
 - 汇总：`tsc -b && vite build` 退出码 `0`，产出 `dist/index.html`、`dist/assets/index-*.css`、`dist/assets/index-*.js`
 - 说明：确认第三阶段前端最小工作台工程在当前仓库下可构建，且静态资源产物可生成；该事实只证明构建门禁通过，不等于真实浏览器联调已留痕
 
-## 当前风险与缺口
+## 本轮第三阶段完整规范补强（2026-04-21）
 
-- 当前 HTTP 层仍是同步 WSGI 骨架，SSE 仅证明事件编码、路由和最小回放骨架成立，不证明长连接保活、断线重连和背压策略已确定
+- 类型：focused backend tests + frontend build + live HTTP / 浏览器截图留痕
+- 执行命令：`uv run pytest tests/test_backend_phase3.py tests/test_backend_http_phase3.py tests/test_backend_run_stream_phase3.py -q`
+- 结果：通过
+- 汇总：`16 passed in 1.64s`
+- 覆盖范围：
+  - `PUT /api/v1/runtime/config` 配置写回对称性
+  - `POST /api/v1/runtime/tools/refresh` 工具刷新回归
+  - phase3 bootstrap/config 中的助手元数据返回
+  - `runs / snapshot / events` 生命周期与终态回放保持稳定
+- 执行命令：`npm --prefix "/e/lwj/biyesheji/frontend" run build`
+- 结果：通过
+- 备注：Node 当前为 `20.18.0`，Vite 7 会提示建议升级到 `20.19+` 或 `22.12+`，但本轮构建仍成功
+- live 验证：
+  - isolated backend：`http://127.0.0.1:7861`
+  - frontend dev server：`http://127.0.0.1:5173`
+  - 已验证 `bootstrap / config / tools / runs / snapshot / events` 可用
+  - 已验证配置写回后 `decision.provider=openai`、`perception.provider=openai_gpt4o`、`frontend.max_iterations=7`、`frontend.speed_scale=0.7`、`execution.home_pose={x:0.11,y:0.22,z:0.33}` 生效
+  - 已验证 `run-e2e-phase3-5` 终态 `completed`，且事件流包含 `snapshot` 事件
+- 浏览器 / 截图留痕：
+  - `docs/records/phase3_workbench_2026-04-21.png`
+  - `docs/records/phase3_workbench_2026-04-21_live.png`
+- 本地最小闭环 smoke：
+  - 执行命令：`uv run python scripts/phase4_local_e2e_smoke.py`
+  - 结果：通过
+  - 产物：`docs/records/phase4_local_e2e_smoke_result_2026-04-21.json`
+  - 结论：确认 mock-first 前后端本地闭环可重复验收，配置保存、工具刷新、run 终态与事件流回放均可自动探测
+- 结论：第三阶段“前端界面开发与 MCP 工具集成”已完成；并已建立第四阶段前置的“本地最小闭环”基线，但该完成边界仍限定在 mock-first backend + 本地联调，不外推为真实硬件、真实视频流或生产级流式服务完成
+
+## 当前风险与缺口
 - 当前 run 状态推送依赖进程内 `RunRegistry + Thread`，未覆盖多进程部署、会话清理、并发竞争与持久化恢复
 - 当前已覆盖重复 `run_id`、非法负数 `after_version / Last-Event-ID` 与终态过期清理，但仍未覆盖高频轮询、异常线程退出、一致性抖动与 `max_terminal_sessions` 溢出淘汰
 - 当前前端仅完成代码/构建级验证，尚无浏览器级联调记录、页面截图、录屏或端到端自动化，真实联调阶段仍有接口集成风险

@@ -92,6 +92,28 @@
 说明：
 - 当前参数解析要求传入 `--instruction`，即使同时使用 `--list-tools`。
 
+## 6.5 本地最小前后端闭环（mock-first）
+
+目标：
+- 固化当前 `frontend + backend/http + mock runtime` 的本地可重复闭环，作为第四阶段前的演示与回归基线。
+
+启动：
+- 后端：`uv run python -m embodied_agent.backend.http --host 127.0.0.1 --port 7861`
+- 前端：`npm --prefix "/e/lwj/biyesheji/frontend" run dev -- --host 127.0.0.1 --port 5173`
+
+验证：
+- `uv run python scripts/phase4_local_e2e_smoke.py`
+
+最小通过标准：
+- 能拉取 `bootstrap / config / tools`
+- 能提交 `PUT /config` 并看到配置回写生效
+- 能提交 `POST /runs` 并通过 `snapshot_url` 看到终态
+- 能从 `events_url` 读取到 `snapshot` 事件
+- 能输出 smoke 结果 JSON 到 `docs/records/phase4_local_e2e_smoke_result_2026-04-21.json`
+
+说明：
+- 本闭环只证明 mock-first 本地链路可重复验收，不代表 Ubuntu 实机、真实模型、真实相机、真实机械臂或生产级长连接已验证。
+
 ## 7. 当前验证结论
 
 当前已验证事实可支持：

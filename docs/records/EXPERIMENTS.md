@@ -95,6 +95,23 @@
 - `run_status`
 - `result_refs`
 
+## 2026-04-21 本地最小前后端闭环验证
+
+- 类型：mock-first 本地闭环 / 非真实实体实验
+- 环境：本机代码环境，frontend dev server + backend HTTP facade
+- 后端地址：`http://127.0.0.1:7861`
+- 前端地址：`http://127.0.0.1:5173`
+- 验证脚本：`uv run python scripts/phase4_local_e2e_smoke.py`
+- 结果文件：`docs/records/phase4_local_e2e_smoke_result_2026-04-21.json`
+- 截图文件：
+  - `docs/records/phase3_workbench_2026-04-21.png`
+  - `docs/records/phase3_workbench_2026-04-21_live.png`
+- 核心结果：
+  - `bootstrap / config / tools / runs / snapshot / events` 全链路可用
+  - 配置写回后 `decision.provider=openai`、`perception.provider=openai_gpt4o`、`frontend.max_iterations=7`、`frontend.speed_scale=0.7`、`execution.home_pose={x:0.11,y:0.22,z:0.33}` 生效
+  - `run-local-e2e` 路径可从指令提交推进到终态，事件流包含 `snapshot`
+- 备注：本记录只证明“本地最小闭环”成立，不计为 Ubuntu 实机、真实视频流或真实硬件实验事实
+
 ## 当前实验状态
 
 - 尚无真实实验数据

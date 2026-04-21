@@ -25,6 +25,7 @@ export function ControlPanel() {
   const runStatus = useWorkbenchStore((state) => state.runStatus);
   const latestError = useWorkbenchStore((state) => state.latestError);
   const latestErrorCode = useWorkbenchStore((state) => state.latestErrorCode);
+  const lastRunSummary = useWorkbenchStore((state) => state.lastRunSummary);
   const setInstruction = useWorkbenchStore((state) => state.setInstruction);
   const setRequestedRunId = useWorkbenchStore((state) => state.setRequestedRunId);
   const clearInstruction = useWorkbenchStore((state) => state.clearInstruction);
@@ -109,6 +110,11 @@ export function ControlPanel() {
               {snapshot?.iteration_count ?? 0} / {snapshot?.max_iterations ?? "-"}
             </strong>
           </div>
+        </div>
+
+        <div className="info-block">
+          <h3>本地闭环摘要</h3>
+          <p>{lastRunSummary}</p>
         </div>
 
         <div className="info-block">

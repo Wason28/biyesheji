@@ -12,11 +12,59 @@ export interface FrontendToolsPayload {
   tools: FrontendToolDescriptor[];
 }
 
+export interface AssistantHint {
+  title: string;
+  status: string;
+  message: string;
+  detected_models?: Array<{
+    provider: string;
+    model: string;
+    configured: boolean;
+  }>;
+}
+
+export interface DecisionConfigSection {
+  provider: string;
+  model: string;
+  provider_options: string[];
+  api_key: string;
+  api_key_configured: boolean;
+  local_path: string;
+  assistant?: AssistantHint;
+}
+
+export interface PerceptionConfigSection {
+  provider: string;
+  model: string;
+  provider_options: string[];
+  api_key: string;
+  api_key_configured: boolean;
+  local_path: string;
+  assistant?: AssistantHint;
+}
+
+export interface ExecutionConfigSection {
+  display_name: string;
+  model_path: string;
+  home_pose: Record<string, number>;
+  adapter: string;
+  backend: string;
+  safety_policy: string;
+  stop_mode: string;
+  mutable: boolean;
+}
+
+export interface FrontendSettingsSection {
+  port: number;
+  max_iterations: number;
+  speed_scale: number;
+}
+
 export interface FrontendConfigPayload {
-  decision: Record<string, unknown>;
-  perception: Record<string, unknown>;
-  execution: Record<string, unknown>;
-  frontend: Record<string, unknown>;
+  decision: DecisionConfigSection;
+  perception: PerceptionConfigSection;
+  execution: ExecutionConfigSection;
+  frontend: FrontendSettingsSection;
 }
 
 export interface FrontendRunSnapshot {

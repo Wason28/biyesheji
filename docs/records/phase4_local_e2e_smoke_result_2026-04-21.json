@@ -1,0 +1,88 @@
+{
+  "bootstrap_status_fields": 17,
+  "config_keys": [
+    "decision",
+    "perception",
+    "execution",
+    "frontend"
+  ],
+  "tools_count": 8,
+  "refreshed_tools_count": 8,
+  "updated_config": {
+    "decision": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "provider_options": [
+        "minimax",
+        "openai",
+        "ollama"
+      ],
+      "api_key": "",
+      "api_key_configured": true,
+      "local_path": "/models/decision",
+      "assistant": {
+        "title": "模型部署助手",
+        "status": "configured",
+        "message": "当前决策模型 gpt-4o-mini 已具备基础部署条件。"
+      }
+    },
+    "perception": {
+      "provider": "openai_gpt4o",
+      "model": "gpt-4o",
+      "provider_options": [
+        "minimax_mcp_vision",
+        "openai_gpt4o",
+        "ollama_vision"
+      ],
+      "api_key": "",
+      "api_key_configured": true,
+      "local_path": "/models/perception",
+      "assistant": {
+        "title": "系统载入助手",
+        "status": "ready",
+        "message": "当前可选感知模型来源：minimax_mcp_vision, openai_gpt4o, ollama_vision。",
+        "detected_models": [
+          {
+            "provider": "minimax",
+            "model": "gpt-4o-mini",
+            "configured": true
+          },
+          {
+            "provider": "openai_gpt4o",
+            "model": "gpt-4o",
+            "configured": true
+          },
+          {
+            "provider": "mock_smolvla",
+            "model": "SmolVLA",
+            "configured": true
+          }
+        ]
+      }
+    },
+    "execution": {
+      "display_name": "SmolVLA",
+      "model_path": "./models/smolvla_finetuned",
+      "home_pose": {
+        "x": 0.11,
+        "y": 0.22,
+        "z": 0.33
+      },
+      "adapter": "mock_lerobot",
+      "backend": "mock_smolvla",
+      "safety_policy": "fail_closed",
+      "stop_mode": "estop_latched",
+      "mutable": false
+    },
+    "frontend": {
+      "port": 7861,
+      "max_iterations": 7,
+      "speed_scale": 0.7
+    }
+  },
+  "accepted_run_id": "run-local-e2e-smoke",
+  "snapshot_status": "completed",
+  "snapshot_terminal": true,
+  "events_contains_snapshot": true,
+  "events_preview": "id: 1\nevent: snapshot\ndata: {\"run\": {\"run_id\": \"run-local-e2e-smoke\", \"status\": \"running\", \"current_node\": \"bootstrap\", \"current_task\": \"\", \"selected_capability\": \"\", \"selected_action\": \"\", \"scene_description\": \"\", \"scene_observations\": {},"
+}

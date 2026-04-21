@@ -58,40 +58,43 @@ class FrontendRuntimeFacade:
         execution = payload.get("execution") if isinstance(payload.get("execution"), dict) else {}
         frontend = payload.get("frontend") if isinstance(payload.get("frontend"), dict) else {}
 
-        for field_name in ("llm_provider", "llm_model", "llm_api_key", "llm_local_path", "max_iterations"):
-            if field_name in decision:
-                setattr(runtime_config.decision, field_name, decision[field_name])
-        for field_name in (
-            "vlm_provider",
-            "vlm_model",
-            "vlm_api_key",
-            "vlm_local_path",
-            "vlm_base_url",
-            "camera_backend",
-            "camera_device_id",
-            "camera_frame_id",
-            "camera_width",
-            "camera_height",
-            "robot_state_backend",
-            "robot_state_base_frame",
-        ):
-            if field_name in perception:
-                setattr(runtime_config.perception, field_name, perception[field_name])
-        for field_name in (
-            "vla_model_path",
-            "robot_config",
-            "robot_adapter",
-            "smolvla_backend",
-            "safety_policy",
-            "stop_mode",
-            "workspace_limits",
-            "home_pose",
-        ):
-            if field_name in execution:
-                setattr(runtime_config.execution, field_name, execution[field_name])
-        for field_name in ("port", "max_iterations", "speed_scale"):
-            if field_name in frontend:
-                setattr(runtime_config.frontend, field_name, frontend[field_name])
+        if "provider" in decision:
+            runtime_config.decision.llm_provider = str(decision["provider"])
+        if "model" in decision:
+            runtime_config.decision.llm_model = str(decision["model"])
+        if "local_path" in decision:
+            runtime_config.decision.llm_local_path = str(decision["local_path"])
+        decision_api_key = decision.get("api_key")
+        if isinstance(decision_api_key, str) and decision_api_key.strip():
+            runtime_config.decision.llm_api_key = decision_api_key.strip()
+
+        if "provider" in perception:
+            runtime_config.perception.vlm_provider = str(perception["provider"])
+        if "model" in perception:
+            runtime_config.perception.vlm_model = str(perception["model"])
+        if "local_path" in perception:
+            runtime_config.perception.vlm_local_path = str(perception["local_path"])
+        perception_api_key = perception.get("api_key")
+        if isinstance(perception_api_key, str) and perception_api_key.strip():
+            runtime_config.perception.vlm_api_key = perception_api_key.strip()
+
+        if "model_path" in execution:
+            runtime_config.execution.vla_model_path = str(execution["model_path"])
+        if "home_pose" in execution and isinstance(execution["home_pose"], dict):
+            runtime_config.execution.home_pose = dict(execution["home_pose"])
+        if "safety_policy" in execution:
+            runtime_config.execution.safety_policy = str(execution["safety_policy"])
+        if "stop_mode" in execution:
+            runtime_config.execution.stop_mode = str(execution["stop_mode"])
+
+        if "port" in frontend:
+            runtime_config.frontend.port = int(frontend["port"])
+        if "max_iterations" in frontend:
+            max_iterations = int(frontend["max_iterations"])
+            runtime_config.frontend.max_iterations = max_iterations
+            runtime_config.decision.max_iterations = max_iterations
+        if "speed_scale" in frontend:
+            runtime_config.frontend.speed_scale = float(frontend["speed_scale"])
 
         self.runtime.perception.reload_runtime(runtime_config)
         self.runtime.execution = build_server(runtime_config)

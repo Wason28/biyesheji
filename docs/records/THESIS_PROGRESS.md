@@ -2,9 +2,9 @@
 
 ## 基本信息
 
-- 当前阶段：论文结构建立完成；第三阶段前端工程骨架已补齐 `config/snapshot` 合同消费，主工作台已形成可截图的第一批实现事实，第三轮文档同步已进入实填阶段
+- 当前阶段：论文结构建立完成；第三阶段前端完整规范能力已落地，配置提交、工具刷新、助手提示、运行态图像承接与浏览器截图留痕均已补齐，第三轮文档同步进入“可按完成事实实填”阶段
 - 当前负责人 Agent：Thesis Curator
-- 最近更新时间：2026-04-20
+- 最近更新时间：2026-04-21
 
 ## 各章节进度
 
@@ -12,18 +12,17 @@
 - 相关工作：已明确研究范围，未补文献综述
 - 系统架构设计：已有完整结构基线，且可纳入第三阶段 backend 独立层、统一工具桥接、前端独立工程与运行态消费链路的最新事实
 - 决策层 Agent 设计：已有 phase-2 主线事实，可按已验证证据写正文骨架
-- 系统实现与验证：已具备第一阶段骨架、第二阶段主线合同、第三阶段最小 HTTP + run 状态推送骨架，以及前端工程骨架、`config` 读取消费、`snapshot` 展示与 REST/SSE 消费层事实；当前可写前端工程骨架、状态管理与接口接线、配置读取合同、`run_id` 生命周期、`snapshot_url` 同步、SSE 事件回放与错误边界小节，但仍缺少浏览器联调留档、真实视频流、Ubuntu 实机与实验数据
+- 系统实现与验证：已具备第一阶段骨架、第二阶段主线合同、第三阶段最小 HTTP + run 状态推送骨架，以及前端完整配置工作区、配置写回、工具刷新、运行态图像承接、REST/SSE 消费层与浏览器截图留痕事实；当前已可写前端界面开发与 MCP 工具集成章节的完成版正文，但仍缺真实视频流、Ubuntu 实机、实验数据与真实硬件链路
 - 总结与展望：已明确方向，待最终成稿时撰写
 
 ## 第三轮前端骨架同步内容
 
 - 前端工程骨架成熟度已可写入论文：`frontend/` 基于 React 19 + Vite 7 + Zustand 5 落地，`App.tsx` 已组织任务输入、配置展示、运行态快照、事件订阅、工具面板五块主工作台，并形成可截图的首屏布局
-- 前端配置合同消费已可写入论文：`lib/api.ts` 已接入 `GET /bootstrap`、`GET /config`、`GET /tools`，`store/workbench.ts` 在初始化阶段并行拉取三类只读合同，`config-panel.tsx` 以 `bootstrap fallback` + `GET /config` 刷新态展示四类配置分区
-- 前端运行态快照消费已可写入论文：`POST /runs` 返回的 `accepted.run`、`snapshot_url` 与 `events_url` 已被 `store/workbench.ts` 承接，`syncRunSnapshot()` 可主动拉取最新 `snapshot`，`runtime-panel.tsx` 已显式展示 `robot_state / last_execution / scene_observations / logs`
+- 前端配置合同消费已升级为完整可写工作区：`lib/api.ts` 已接入 `GET /bootstrap`、`GET /config`、`PUT /config`、`GET /tools`、`POST /tools/refresh`；`store/workbench.ts` 已支持配置草稿、提交、回滚与刷新；`config-panel.tsx` 已支持模型选择、API Key、本地路径、机械臂初始位置、速度缩放和最大迭代次数编辑
+- 前端助手提示已可写入论文：配置面板已引入“模型部署助手”和“系统载入助手”提示卡，后端通过 `config` 合同返回当前模型候选、配置状态与下一步引导信息
+- 前端运行态快照消费已可写入论文：`POST /runs` 返回的 `accepted.run`、`snapshot_url` 与 `events_url` 已被 `store/workbench.ts` 承接，`syncRunSnapshot()` 可主动拉取最新 `snapshot`，`runtime-panel.tsx` 已显式展示 `robot_state / last_execution / scene_observations / logs`，并承接 `current_image` 图像展示
 - 前端运行态订阅语义已可写入论文：`lib/sse.ts` + `store/workbench.ts` 使用 `EventSource` 消费 `events_url` 的 `snapshot` 事件，并按 `version` 去重、在终态主动关闭订阅；`event-panel.tsx` 已提供 `snapshot_url / events_url`、版本时间线与终态收口提示
-- 联调错误边界已可保留为论文事实：重复 `run_id` 返回 `409 RunAlreadyExists`，`after_version` 与 `Last-Event-ID` 必须为非负整数，前端当前已具备承接这些错误态的展示位置
-- 第三阶段当前可写成“前端已完成只读配置合同与运行态快照消费”，但仍不能写成浏览器联调留档、真实视频流、配置回写或完整前后端闭环已完成
-
+- 本轮已补浏览器截图与 live 联调留痕：`docs/records/phase3_workbench_2026-04-21.png`、`docs/records/phase3_workbench_2026-04-21_live.png` 已形成第三阶段完成边界的图像证据
 ## 已完成
 
 - 已完成论文章节主框架
