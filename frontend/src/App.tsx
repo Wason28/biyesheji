@@ -13,54 +13,64 @@ export function App() {
   const bootstrapStatus = useWorkbenchStore((state) => state.bootstrapStatus);
   const streamStatus = useWorkbenchStore((state) => state.streamStatus);
   const snapshot = useWorkbenchStore((state) => state.snapshot);
+  const lastRunSummary = useWorkbenchStore((state) => state.lastRunSummary);
+  const themeMode = useWorkbenchStore((state) => state.themeMode);
+  const setThemeMode = useWorkbenchStore((state) => state.setThemeMode);
 
   useEffect(() => {
     void initialize();
   }, [initialize]);
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">第三阶段最小前端工程骨架</p>
-          <h1>Embodied Agent 主工作台</h1>
-          <p className="app-header__summary">
-            围绕任务输入、配置展示、工具面板、运行态快照和事件订阅占位组织主工作台，
-            当前仅消费显式后端展示合同。
+    <div className={`app-shell theme-${themeMode}`}>
+      <header className="app-hero">
+        <div className="app-hero__content">
+          <p className="eyebrow">Open Robotics Workspace</p>
+          <h1>Embodied Agent Workbench</h1>
+          <p className="app-hero__summary">
+            面向机器人任务控制、运行监测与模型配置的开源工作台。保持灵活与透明，
+            同时把关键状态、配置与事件流组织得更清晰。
           </p>
+          <div className="app-hero__statusline">
+            <span className="hero-pill">Backend · {runtimeBaseUrl || "同源 /api"}</span>
+            <span className="hero-pill">Bootstrap · {bootstrapStatus}</span>
+            <span className="hero-pill">Stream · {streamStatus}</span>
+            <span className="hero-pill">Run · {snapshot?.status || "idle"}</span>
+            <button
+              type="button"
+              className="hero-toggle"
+              onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
+            >
+              {themeMode === "dark" ? "切换浅色" : "切换深色"}
+            </button>
+          </div>
         </div>
-        <div className="app-header__meta">
-          <div className="meta-card">
-            <span>Backend Base URL</span>
-            <strong>{runtimeBaseUrl || "同源 /api 代理"}</strong>
+        <div className="app-hero__aside">
+          <div className="hero-stat-card">
+            <span>当前 Run</span>
+            <strong>{snapshot?.run_id || "未启动"}</strong>
           </div>
-          <div className="meta-card">
-            <span>Bootstrap</span>
-            <strong>{bootstrapStatus}</strong>
+          <div className="hero-stat-card">
+            <span>当前节点</span>
+            <strong>{snapshot?.current_node || "bootstrap"}</strong>
           </div>
-          <div className="meta-card">
-            <span>事件流</span>
-            <strong>{streamStatus}</strong>
-          </div>
-          <div className="meta-card">
-            <span>当前状态</span>
-            <strong>{snapshot?.status || "idle"}</strong>
+          <div className="hero-stat-card hero-stat-card--wide">
+            <span>最近摘要</span>
+            <p>{lastRunSummary}</p>
           </div>
         </div>
       </header>
 
-      <main className="workbench-grid">
-        <div className="workbench-column">
+      <main className="dashboard-grid">
+        <section className="dashboard-main">
           <ControlPanel />
-          <ConfigPanel />
-        </div>
-        <div className="workbench-column">
           <RuntimePanel />
+        </section>
+        <aside className="dashboard-side">
           <EventPanel />
-        </div>
-        <div className="workbench-column">
+          <ConfigPanel />
           <ToolsPanel />
-        </div>
+        </aside>
       </main>
     </div>
   );

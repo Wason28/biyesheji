@@ -12,8 +12,8 @@ export function EventPanel() {
 
   return (
     <PanelShell
-      title="事件订阅"
-      subtitle="当前按后端 SSE snapshot 事件消费；由于服务端是最小回放骨架，前端采用版本去重并显式展示续连状态。"
+      title="事件记录"
+      subtitle="按时间顺序查看状态推进、终态收口与事件流异常提示。"
       actions={
         <div className="button-row">
           <button type="button" className="button-secondary" onClick={() => void syncRunSnapshot()}>
@@ -28,19 +28,19 @@ export function EventPanel() {
       <div className="stack">
         <div className="key-value-grid">
           <div className="kv-card">
-            <span>stream_status</span>
+            <span>事件流</span>
             <strong>{streamStatus}</strong>
           </div>
           <div className="kv-card">
-            <span>latest_version</span>
+            <span>最新版本</span>
             <strong>{latestRunState?.version ?? "-"}</strong>
           </div>
           <div className="kv-card">
-            <span>terminal</span>
+            <span>终态标记</span>
             <strong>{String(latestRunState?.terminal ?? false)}</strong>
           </div>
           <div className="kv-card">
-            <span>event_count</span>
+            <span>事件总数</span>
             <strong>{eventFeed.length}</strong>
           </div>
         </div>

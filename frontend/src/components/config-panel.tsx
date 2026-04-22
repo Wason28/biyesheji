@@ -44,6 +44,7 @@ function renderAssistantCard(assistant: AssistantHint | undefined) {
 
 function renderDecisionSection(
   section: DecisionConfigSection,
+  showModelAssistants: boolean,
   onChange: (field: string, value: string | number) => void,
 ) {
   return (
@@ -85,13 +86,14 @@ function renderDecisionSection(
           onChange={(event) => onChange("local_path", event.target.value)}
         />
       </label>
-      {renderAssistantCard(section.assistant)}
+      {showModelAssistants ? renderAssistantCard(section.assistant) : null}
     </div>
   );
 }
 
 function renderPerceptionSection(
   section: PerceptionConfigSection,
+  showModelAssistants: boolean,
   onChange: (field: string, value: string | number) => void,
 ) {
   return (
@@ -133,7 +135,7 @@ function renderPerceptionSection(
           onChange={(event) => onChange("local_path", event.target.value)}
         />
       </label>
-      {renderAssistantCard(section.assistant)}
+      {showModelAssistants ? renderAssistantCard(section.assistant) : null}
     </div>
   );
 }
@@ -239,6 +241,8 @@ export function ConfigPanel() {
   const configStatus = useWorkbenchStore((state) => state.configStatus);
   const configDraftStatus = useWorkbenchStore((state) => state.configDraftStatus);
   const configNotice = useWorkbenchStore((state) => state.configNotice);
+  const showModelAssistants = useWorkbenchStore((state) => state.showModelAssistants);
+  const toggleModelAssistants = useWorkbenchStore((state) => state.toggleModelAssistants);
   const latestError = useWorkbenchStore((state) => state.latestError);
   const latestErrorCode = useWorkbenchStore((state) => state.latestErrorCode);
   const activeConfigTab = useWorkbenchStore((state) => state.activeConfigTab);
@@ -259,8 +263,8 @@ export function ConfigPanel() {
 
   return (
     <PanelShell
-      title="模型配置与个性化设置"
-      subtitle="覆盖模型选择、API Key、本地路径、机械臂初始位置、执行速度与最大迭代次数。"
+      title="模型设置"
+      subtitle="管理决策、感知与执行相关配置，并保留清晰的保存与回滚反馈。"
       actions={
         <div className="button-row">
           <button type="button" className="button-secondary" onClick={() => void refreshConfig()}>
@@ -268,6 +272,9 @@ export function ConfigPanel() {
           </button>
           <button type="button" className="button-secondary" onClick={resetConfigDraft}>
             回滚草稿
+          </button>
+          <button type="button" className="button-secondary" onClick={toggleModelAssistants}>
+            {showModelAssistants ? "隐藏助手" : "显示助手"}
           </button>
           <button type="button" onClick={() => void saveConfigDraft()} disabled={configDraftStatus === "loading"}>
             {configDraftStatus === "loading" ? "提交中" : "保存配置"}
@@ -317,12 +324,12 @@ export function ConfigPanel() {
         </div>
 
         {activeConfigTab === "decision"
-          ? renderDecisionSection(section as DecisionConfigSection, (field, value) =>
+          ? renderDecisionSection(section as DecisionConfigSection, showModelAssistants, (field, value) =>
               updateConfigDraft("decision", field, value),
             )
           : null}
         {activeConfigTab === "perception"
-          ? renderPerceptionSection(section as PerceptionConfigSection, (field, value) =>
+          ? renderPerceptionSection(section as PerceptionConfigSection, showModelAssistants, (field, value) =>
               updateConfigDraft("perception", field, value),
             )
           : null}

@@ -24,9 +24,14 @@ import type {
 
 type AsyncStatus = "idle" | "loading" | "ready" | "error";
 type StreamStatus = "idle" | "connecting" | "live" | "closed" | "error";
+type ThemeMode = "dark" | "light";
 
 interface WorkbenchState {
   runtimeBaseUrl: string;
+  themeMode: ThemeMode;
+  showRuntimeDetails: boolean;
+  showToolSchemas: boolean;
+  showModelAssistants: boolean;
   instruction: string;
   requestedRunId: string;
   bootstrapStatus: AsyncStatus;
@@ -66,6 +71,10 @@ interface WorkbenchState {
     value: string | number,
   ) => void;
   updateHomePoseDraft: (axis: string, value: number) => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  toggleRuntimeDetails: () => void;
+  toggleToolSchemas: () => void;
+  toggleModelAssistants: () => void;
   clearInstruction: () => void;
   setActiveConfigTab: (tab: ConfigSectionKey) => void;
   disconnectStream: () => void;
@@ -98,6 +107,10 @@ function cloneConfig(config: FrontendConfigPayload | null) {
 
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   runtimeBaseUrl,
+  themeMode: "dark",
+  showRuntimeDetails: false,
+  showToolSchemas: false,
+  showModelAssistants: false,
   instruction: "",
   requestedRunId: "",
   bootstrapStatus: "idle",
@@ -411,6 +424,26 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         configDraftStatus: "idle",
       };
     });
+  },
+  setThemeMode(mode) {
+    set({
+      themeMode: mode,
+    });
+  },
+  toggleRuntimeDetails() {
+    set((state) => ({
+      showRuntimeDetails: !state.showRuntimeDetails,
+    }));
+  },
+  toggleToolSchemas() {
+    set((state) => ({
+      showToolSchemas: !state.showToolSchemas,
+    }));
+  },
+  toggleModelAssistants() {
+    set((state) => ({
+      showModelAssistants: !state.showModelAssistants,
+    }));
   },
   clearInstruction() {
     set({

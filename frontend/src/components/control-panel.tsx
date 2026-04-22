@@ -35,8 +35,8 @@ export function ControlPanel() {
 
   return (
     <PanelShell
-      title="任务输入"
-      subtitle="对接 POST /api/v1/runtime/runs，优先消费第三阶段 run_id 生命周期合同。"
+      title="运行任务"
+      subtitle="从自然语言任务发起一次完整 run，并持续观察当前执行状态。"
       actions={
         <span className={`status-badge status-badge--${runStatus}`}>
           {runStatus === "loading" ? "提交中" : bootstrapStatus === "ready" ? "就绪" : "初始化中"}
@@ -77,7 +77,7 @@ export function ControlPanel() {
 
         <div className="button-row">
           <button type="button" onClick={() => void submitRun()} disabled={!canSubmit}>
-            发送任务
+            启动任务
           </button>
           <button type="button" className="button-secondary" onClick={clearInstruction}>
             清空输入

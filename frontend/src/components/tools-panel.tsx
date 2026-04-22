@@ -7,16 +7,23 @@ export function ToolsPanel() {
   const toolsNotice = useWorkbenchStore((state) => state.toolsNotice);
   const latestError = useWorkbenchStore((state) => state.latestError);
   const latestErrorCode = useWorkbenchStore((state) => state.latestErrorCode);
+  const showToolSchemas = useWorkbenchStore((state) => state.showToolSchemas);
+  const toggleToolSchemas = useWorkbenchStore((state) => state.toggleToolSchemas);
   const refreshTools = useWorkbenchStore((state) => state.refreshTools);
 
   return (
     <PanelShell
-      title="工具面板"
-      subtitle="消费 GET /api/v1/runtime/tools，支持手动刷新并区分 perception / execution 图层。"
+      title="可用工具"
+      subtitle="查看当前已注册能力，并在需要时刷新运行时工具视图。"
       actions={
-        <button type="button" className="button-secondary" onClick={() => void refreshTools()}>
-          刷新工具
-        </button>
+        <div className="button-row">
+          <button type="button" className="button-secondary" onClick={toggleToolSchemas}>
+            {showToolSchemas ? "隐藏结构" : "显示结构"}
+          </button>
+          <button type="button" className="button-secondary" onClick={() => void refreshTools()}>
+            刷新工具
+          </button>
+        </div>
       }
     >
       <div className="stack">
@@ -49,13 +56,14 @@ export function ToolsPanel() {
               <p>{tool.description || "未提供描述"}</p>
               <div className="tool-card__meta">
                 <span>
-                  capability_names:{" "}
-                  {tool.capability_names?.length ? tool.capability_names.join(", ") : "无"}
+                  能力标签：{tool.capability_names?.length ? tool.capability_names.join(", ") : "无"}
                 </span>
               </div>
-              <pre className="code-block">
-                {JSON.stringify(tool.input_schema || {}, null, 2)}
-              </pre>
+              {showToolSchemas ? (
+                <pre className="code-block compact-code-block">
+                  {JSON.stringify(tool.input_schema || {}, null, 2)}
+                </pre>
+              ) : null}
             </article>
           ))}
           {!tools.length ? <div className="empty-state">当前没有可展示的工具描述。</div> : null}
