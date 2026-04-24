@@ -1,0 +1,9 @@
+{
+  "name": "embodied-agent-prototype",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "python -m embodied_agent.backend.http"
+  }
+}

@@ -26,24 +26,27 @@ export function ControlPanel() {
   const latestError = useWorkbenchStore((state) => state.latestError);
   const latestErrorCode = useWorkbenchStore((state) => state.latestErrorCode);
   const lastRunSummary = useWorkbenchStore((state) => state.lastRunSummary);
+  const latestRunState = useWorkbenchStore((state) => state.latestRunState);
   const setInstruction = useWorkbenchStore((state) => state.setInstruction);
   const setRequestedRunId = useWorkbenchStore((state) => state.setRequestedRunId);
   const clearInstruction = useWorkbenchStore((state) => state.clearInstruction);
   const submitRun = useWorkbenchStore((state) => state.submitRun);
   const initialize = useWorkbenchStore((state) => state.initialize);
   const canSubmit = bootstrapStatus === "ready" && runStatus !== "loading";
+  const interventionRequired = latestRunState?.event === "human_intervention_required";
 
   return (
     <PanelShell
-      title="运行任务"
-      subtitle="从自然语言任务发起一次完整 run，并持续观察当前执行状态。"
+      title="交互控制中心"
+      subtitle="保持原型右栏结构，但只接入真实可用的 run 能力。"
       actions={
         <span className={`status-badge status-badge--${runStatus}`}>
           {runStatus === "loading" ? "提交中" : bootstrapStatus === "ready" ? "就绪" : "初始化中"}
         </span>
       }
+      compact
     >
-      <div className="stack">
+      <div className="control-stack">
         {bootstrapStatus === "error" ? (
           <div className="alert alert-error">
             初始化未完成，当前无法提交任务。
@@ -55,32 +58,59 @@ export function ControlPanel() {
           </div>
         ) : null}
 
-        <label className="field">
-          <span>自然语言任务</span>
+        <div className="command-card">
+          <div className="command-card__header">
+            <span>Command Input</span>
+            <strong>自然语言任务</strong>
+          </div>
           <textarea
+            data-testid="instruction-input"
             value={instruction}
             onChange={(event) => setInstruction(event.target.value)}
-            placeholder="示例：抓取桌面方块并回到安全位置"
+            placeholder="输入指令，如：帮我把方块拿过来"
             rows={5}
           />
-        </label>
+          <label className="field">
+            <span>自定义 run_id（可选）</span>
+            <input
+              className="text-input"
+              value={requestedRunId}
+              onChange={(event) => setRequestedRunId(event.target.value)}
+              placeholder="示例：run-demo-001"
+            />
+          </label>
+          <div className="button-row command-card__actions">
+            <button type="button" onClick={() => void submitRun()} disabled={!canSubmit}>
+              启动任务
+            </button>
+            <button type="button" className="button-secondary" onClick={clearInstruction}>
+              清空输入
+            </button>
+          </div>
+        </div>
 
-        <label className="field">
-          <span>自定义 run_id（可选）</span>
-          <input
-            className="text-input"
-            value={requestedRunId}
-            onChange={(event) => setRequestedRunId(event.target.value)}
-            placeholder="示例：run-demo-001"
-          />
-        </label>
-
-        <div className="button-row">
-          <button type="button" onClick={() => void submitRun()} disabled={!canSubmit}>
-            启动任务
+        <div className="action-grid">
+          <button
+            type="button"
+            data-testid="start-run-button"
+            className="action-button action-button--start"
+            onClick={() => void submitRun()}
+            disabled={!canSubmit}
+          >
+            <strong>开始</strong>
+            <span>真实调用 submitRun()</span>
           </button>
-          <button type="button" className="button-secondary" onClick={clearInstruction}>
-            清空输入
+          <button type="button" className="action-button action-button--disabled" disabled>
+            <strong>结束</strong>
+            <span>后端未接线</span>
+          </button>
+          <button type="button" className={`action-button ${interventionRequired ? "action-button--warn" : "action-button--disabled"}`} disabled>
+            <strong>人工干预</strong>
+            <span>{interventionRequired ? "收到人工介入事件" : "后端未接线"}</span>
+          </button>
+          <button type="button" className="action-button action-button--danger" disabled>
+            <strong>紧急中断</strong>
+            <span>后端未接线</span>
           </button>
         </div>
 
@@ -91,20 +121,20 @@ export function ControlPanel() {
           </div>
         ) : null}
 
-        <div className="key-value-grid">
-          <div className="kv-card">
+        <div className="control-metrics">
+          <div className="metric-card">
             <span>当前 Run</span>
             <strong>{snapshot?.run_id || runAccepted?.run_id || "未创建"}</strong>
           </div>
-          <div className="kv-card">
+          <div className="metric-card">
             <span>运行状态</span>
             <strong>{renderStatusLabel(snapshot?.status)}</strong>
           </div>
-          <div className="kv-card">
-            <span>当前节点</span>
-            <strong>{snapshot?.current_node || "bootstrap"}</strong>
+          <div className="metric-card">
+            <span>当前阶段</span>
+            <strong>{snapshot?.current_phase || "bootstrap"}</strong>
           </div>
-          <div className="kv-card">
+          <div className="metric-card">
             <span>迭代进度</span>
             <strong>
               {snapshot?.iteration_count ?? 0} / {snapshot?.max_iterations ?? "-"}
@@ -112,30 +142,16 @@ export function ControlPanel() {
           </div>
         </div>
 
-        <div className="info-block">
-          <h3>本地闭环摘要</h3>
+        <div className="control-detail-card">
+          <span>当前任务</span>
+          <strong>{snapshot?.current_task || "等待后端返回 current_task 字段。"}</strong>
           <p>{lastRunSummary}</p>
         </div>
 
-        <div className="info-block">
-          <h3>当前任务</h3>
-          <p>{snapshot?.current_task || "等待后端返回 current_task 字段。"}</p>
-        </div>
-
-        <div className="info-block">
-          <h3>场景描述</h3>
-          <p>{snapshot?.scene_description || "等待后端返回 scene_description 字段。"}</p>
-        </div>
-
-        <div className="key-value-grid">
-          <div className="kv-card">
-            <span>selected_capability</span>
-            <strong>{snapshot?.selected_capability || "-"}</strong>
-          </div>
-          <div className="kv-card">
-            <span>selected_action</span>
-            <strong>{snapshot?.selected_action || "-"}</strong>
-          </div>
+        <div className="control-detail-card">
+          <span>场景描述</span>
+          <strong>{snapshot?.scene_description || "等待后端返回 scene_description 字段。"}</strong>
+          <p>能力：{snapshot?.selected_capability || "-"} · 动作：{snapshot?.selected_action || "-"}</p>
         </div>
       </div>
     </PanelShell>

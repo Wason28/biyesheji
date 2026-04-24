@@ -15,14 +15,14 @@
 
 ## 2. 当前项目一句话状态
 
-当前项目已完成第一阶段骨架实现与第二阶段主线收敛；第三阶段前端已补齐 config 消费、`snapshot_url` 兜底同步与初始化重试，并保持构建通过，当前重点转为浏览器联调、最小验收闭环和证据留痕。
+当前项目已完成第一阶段骨架实现与第二阶段主线收敛；第三阶段前端已完成 prototype 风格工作台重构、根目录 `npm run dev` 一键联调、真实 execution flow 可视化修正与本地 live 验证，当前重点转为 Ubuntu / 真实链路扩展与自动化留痕。
 
 ## 3. 默认接手动作
 
 如果没有额外指令，默认顺序是：
 1. 先确认当前任务属于前端、后端、文档、测试还是论文支线
 2. 先读对应 `docs/specs/`
-3. 若是前端任务，优先看 `frontend/src/App.tsx`、`frontend/src/store/workbench.ts`、`frontend/src/components/config-panel.tsx`、`frontend/src/components/control-panel.tsx`、`frontend/src/components/event-panel.tsx`、`frontend/src/lib/api.ts`、`frontend/src/lib/sse.ts`
-4. 若是后端联调任务，优先看 `src/embodied_agent/backend/http.py`、`service.py`、`run_registry.py`
+3. 若是前端任务，优先看 `frontend/src/App.tsx`、`frontend/src/store/workbench.ts`、`frontend/src/components/config-panel.tsx`、`frontend/src/components/control-panel.tsx`、`frontend/src/components/event-panel.tsx`、`frontend/src/lib/api.ts`、`frontend/src/lib/sse.ts`、`frontend/vite.config.ts`
+4. 若是后端联调任务，优先看 `src/embodied_agent/backend/http.py`、`service.py`、`run_registry.py`、`package.json`、`scripts/dev.js`
 5. 开工前确认本轮要更新哪些 `docs/records/`
 6. 完成后补状态、记录和交接

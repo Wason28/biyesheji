@@ -4,6 +4,17 @@
 
 每条记录至少包含：日期、负责 Agent、对应里程碑、修改模块、修改内容、对应需求点、风险和遗留问题、下一步建议、对应论文章节。
 
+### 2026-04-24
+
+- 负责 Agent：Implementation / QA / Documentation Agent
+- 对应里程碑：第三阶段本地软件级 embodied-agent demo 收口与最新文档同步
+- 修改模块：`src/embodied_agent/perception/providers.py` / `src/embodied_agent/decision/providers.py` / `src/embodied_agent/decision/nodes.py` / `src/embodied_agent/backend/service.py` / `src/embodied_agent/backend/http.py` / `src/embodied_agent/backend/run_registry.py` / `frontend/src/App.tsx` / `frontend/src/components/control-panel.tsx` / `frontend/src/components/event-panel.tsx` / `frontend/src/styles.css` / `frontend/tests/e2e/workbench-smoke.spec.ts` / `tests/test_perception_phase1.py` / `tests/test_decision_phase1.py` / `tests/test_backend_phase3.py` / `tests/test_backend_http_phase3.py` / `tests/test_backend_run_stream_phase3.py` / `README.md` / `docs/records/CURRENT_STATUS.md` / `docs/records/TEST_REPORT.md` / `docs/records/HANDOFF.md` / `docs/records/DEVELOPMENT_LOG.md`
+- 修改内容：基于“把项目补完整（除 MCP 执行）”的最新完成口径，完成第三阶段本地软件级 demo 收口：确认感知层已接通 `minimax_mcp_vision`、`openai_gpt4o`、`ollama_vision` 的真实 provider 装配，并在未配置时显式回退 mock；确认决策层已补 `minimax`、`openai`、`ollama` 真实 LLM adapter，同时保留 `_split_into_tasks()` 与 `_select_capability_and_action()` heuristic fallback；确认前端工作台已稳定消费 `bootstrap / config / tools / runs / snapshot / events`，并通过 `control-panel.tsx`、`event-panel.tsx`、`styles.css` 与 Playwright smoke 对运行提交流程、设置弹窗、事件日志和空指令校验形成浏览器级回归；确认 `backend/service.py` 已把配置更新改为原子热重载，`backend/http.py` 与 `run_registry.py` 已稳定覆盖 `run_id` 冲突、非法 `after_version / Last-Event-ID`、缺失 run 与终态会话治理；最后统一把 `README.md`、`CURRENT_STATUS.md`、`TEST_REPORT.md`、`HANDOFF.md` 与本文件同步到“本地软件级 embodied-agent demo 已完成”的真实表述，并写明 focused pytest `51 passed`、前端构建通过、Playwright e2e `3 passed`
+- 对应需求点：用户明确要求补齐前端工作台、后端运行时、真实模型接入与工程化测试，但显式排除 MCP 执行；因此本轮实现必须在保留现有 contract、保留 mock/heuristic fallback 与不夸大完成边界的前提下，形成可本地运行、可观测、可回归的软件级 demo
+- 风险和遗留问题：当前执行层仍保持 mock execution 边界，MCP 执行、真实机械臂动作、真实视频流与实体抓取闭环尚未实现；后端仍为同步 WSGI + 进程内 `RunRegistry` 骨架，不代表生产级流式服务已完成；Ubuntu 实机、真实 provider 凭据与长时运行稳定性仍待独立验收；Node `20.18.0` 仍低于 Vite 7 推荐下限
+- 下一步建议：优先把 Ubuntu / 真实链路验证做成独立验收批次，补失败态与断流恢复的浏览器级回归记录，继续评估长连接服务栈与持久化演进方案，并把测试留痕、运行截图与论文材料持续同步到 records
+- 对应论文章节：系统架构设计、前端交互设计、前后端接口设计、系统实现与验证、测试设计与结果分析、工程化与交接规范
+
 ## 实际记录
 
 ### 2026-04-20

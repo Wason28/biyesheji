@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Mapping
 
 from .contracts import (
@@ -10,10 +11,13 @@ from .contracts import (
     FrontendErrorPayload,
     FrontendRunAPI,
     FrontendRunSnapshot,
+    FrontendRunStatePayload,
     FrontendRuntimeAPI,
     FrontendToolDescriptor,
     FrontendToolsPayload,
+    RunPhase,
     RunStatus,
+    RuntimeEventName,
 )
 
 if TYPE_CHECKING:
@@ -25,22 +29,37 @@ PERCEPTION_VLM_PROVIDERS = ["minimax_mcp_vision", "openai_gpt4o", "ollama_vision
 FRONTEND_STATUS_FIELDS = [
     "run_id",
     "status",
+    "current_phase",
     "current_node",
     "current_task",
     "selected_capability",
     "selected_action",
     "scene_description",
     "scene_observations",
+    "perception_confidence",
     "action_result",
     "iteration_count",
     "max_iterations",
     "current_image",
     "robot_state",
+    "plan",
+    "pre_execution_feedback",
+    "execution_feedback",
+    "verification_result",
+    "error_diagnosis",
+    "retry_context",
+    "memory_summary",
+    "termination_reason",
+    "final_report",
     "last_node_result",
     "last_execution",
     "logs",
     "error",
 ]
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _tool_descriptor(*, layer: str, tool: Any) -> FrontendToolDescriptor:
@@ -65,6 +84,41 @@ def build_frontend_tools_payload(runtime: Phase1Runtime) -> FrontendToolsPayload
     perception_tools = [_tool_descriptor(layer="perception", tool=tool) for tool in runtime.perception.list_tools()]
     execution_tools = [_tool_descriptor(layer="execution", tool=tool) for tool in runtime.execution.list_tools()]
     return {"tools": perception_tools + execution_tools}
+
+
+def _build_perception_assistant(runtime: Phase1Runtime, execution_model: Mapping[str, Any]) -> dict[str, Any]:
+    provider_summary = runtime.perception.provider.config_summary()
+    configured = bool(provider_summary.get("configured", False))
+    status = str(provider_summary.get("status", "configured" if configured else "attention"))
+    fallback_reason = str(provider_summary.get("fallback_reason", "")).strip()
+    endpoint = str(provider_summary.get("endpoint") or provider_summary.get("base_url") or "").strip()
+    selected_provider = runtime.config.perception.vlm_provider
+    selected_model = runtime.config.perception.vlm_model
+
+    if fallback_reason:
+        message = f"当前感知模型 {selected_provider} 已回退到 mock provider。{fallback_reason}"
+    elif endpoint:
+        message = f"当前感知模型 {selected_model} 已通过 {selected_provider} 接入：{endpoint}。"
+    else:
+        message = f"当前感知模型 {selected_model} 已装配到 {selected_provider}。"
+
+    return {
+        "title": "系统载入助手",
+        "status": status,
+        "message": message,
+        "detected_models": [
+            {
+                "provider": selected_provider,
+                "model": selected_model,
+                "configured": configured,
+            },
+            {
+                "provider": execution_model["backend"],
+                "model": execution_model["name"],
+                "configured": True,
+            },
+        ],
+    }
 
 
 def build_frontend_config_payload(runtime: Phase1Runtime) -> FrontendConfigPayload:
@@ -97,16 +151,7 @@ def build_frontend_config_payload(runtime: Phase1Runtime) -> FrontendConfigPaylo
             "api_key": "",
             "api_key_configured": bool(runtime.config.perception.vlm_api_key),
             "local_path": runtime.config.perception.vlm_local_path,
-            "assistant": {
-                "title": "系统载入助手",
-                "status": "ready",
-                "message": f"当前可选感知模型来源：{', '.join(PERCEPTION_VLM_PROVIDERS)}。",
-                "detected_models": [
-                    {"provider": "minimax", "model": runtime.config.decision.llm_model, "configured": bool(runtime.config.decision.llm_api_key or runtime.config.decision.llm_local_path)},
-                    {"provider": perception_provider, "model": runtime.config.perception.vlm_model, "configured": bool(runtime.config.perception.vlm_api_key or runtime.config.perception.vlm_local_path)},
-                    {"provider": execution_model["backend"], "model": execution_model["name"], "configured": True},
-                ],
-            },
+            "assistant": _build_perception_assistant(runtime, execution_model),
         },
         "execution": {
             "display_name": execution_model["name"],
@@ -139,14 +184,23 @@ def build_frontend_bootstrap(runtime: Phase1Runtime) -> FrontendBootstrapPayload
 
 
 def _frontend_run_status(state: Mapping[str, Any]) -> RunStatus:
+    current_phase = str(state.get("current_phase", ""))
+    if current_phase != "final_status":
+        return "running"
+
+    final_report = state.get("final_report", {})
+    if isinstance(final_report, Mapping):
+        if final_report.get("completed"):
+            return "completed"
+        if final_report.get("status") == "failed":
+            return "failed"
+
     action_result = str(state.get("action_result", ""))
+    if action_result == "success":
+        return "completed"
     if action_result == "failed":
         return "failed"
-    if action_result == "success" and not state.get("current_task") and not state.get("task_queue"):
-        return "completed"
-    if action_result == "in_progress":
-        return "running"
-    return "idle"
+    return "running"
 
 
 def build_frontend_run_snapshot(
@@ -159,26 +213,65 @@ def build_frontend_run_snapshot(
     logs = [dict(item) for item in history if isinstance(item, Mapping)]
     status = _frontend_run_status(state)
     error = ""
-    if status == "failed" and isinstance(last_node_result, Mapping):
-        error = str(last_node_result.get("message", ""))
+    if status == "failed":
+        if str(state.get("current_phase", "")) == "final_status":
+            diagnosis = state.get("error_diagnosis", {})
+            if isinstance(diagnosis, Mapping):
+                error = str(diagnosis.get("reason", ""))
+            if not error:
+                error = str(state.get("termination_reason", ""))
+        if not error and isinstance(last_node_result, Mapping):
+            error = str(last_node_result.get("message", ""))
     return {
         "run_id": run_id,
         "status": status,
+        "current_phase": str(state.get("current_phase", "trigger")),
         "current_node": str(last_node_result.get("node", "")) if isinstance(last_node_result, Mapping) else "",
         "current_task": str(state.get("current_task", "")),
         "selected_capability": str(state.get("selected_capability", "")),
         "selected_action": str(state.get("selected_action", "")),
         "scene_description": str(state.get("scene_description", "")),
         "scene_observations": dict(state.get("scene_observations", {})),
+        "perception_confidence": float(state.get("perception_confidence", 0.0) or 0.0),
         "action_result": str(state.get("action_result", "in_progress")),
         "iteration_count": int(state.get("iteration_count", 0)),
         "max_iterations": int(state.get("max_iterations", 0)),
         "current_image": str(state.get("current_image", "")),
         "robot_state": dict(state.get("robot_state", {})),
+        "plan": [dict(item) for item in state.get("plan", []) if isinstance(item, Mapping)],
+        "pre_execution_feedback": dict(state.get("pre_execution_feedback", {})),
+        "execution_feedback": dict(state.get("execution_feedback", {})),
+        "verification_result": dict(state.get("verification_result", {})),
+        "error_diagnosis": dict(state.get("error_diagnosis", {})),
+        "retry_context": dict(state.get("retry_context", {})),
+        "memory_summary": dict(state.get("memory_summary", {})),
+        "termination_reason": str(state.get("termination_reason", "")),
+        "final_report": dict(state.get("final_report", {})),
         "last_node_result": dict(last_node_result) if isinstance(last_node_result, Mapping) else {},
         "last_execution": dict(state.get("last_execution", {})),
         "logs": logs,
         "error": error,
+    }
+
+
+def build_frontend_run_event(
+    state: Mapping[str, Any],
+    *,
+    run_id: str,
+    version: int,
+    event: RuntimeEventName,
+    terminal: bool,
+    timestamp: str | None = None,
+) -> FrontendRunStatePayload:
+    snapshot = build_frontend_run_snapshot(state, run_id=run_id)
+    phase = str(snapshot.get("current_phase", "trigger"))
+    return {
+        "run": snapshot,
+        "version": version,
+        "terminal": terminal,
+        "event": event,
+        "phase": phase if phase else "trigger",
+        "timestamp": timestamp or _utc_now_iso(),
     }
 
 

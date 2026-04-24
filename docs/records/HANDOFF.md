@@ -2,52 +2,49 @@
 
 ## 当前交接状态
 
-- 日期：2026-04-21
-- 当前阶段：第三阶段已完成，当前处于“完整规范功能、后端配置写回与工具刷新、浏览器联调截图与 live 验证事实已补齐”的状态
+- 日期：2026-04-24
+- 当前阶段：第三阶段已完成，当前处于“本地软件级 embodied-agent demo 已完成，进入文档同步 + Ubuntu / 真实链路待验收”的状态
 
 ## 本轮新增事实
 
-- `frontend/src/components/config-panel.tsx` 已升级为完整配置工作区，支持 `decision / perception / execution / frontend` 四分区编辑、提交、回滚、模型部署助手与系统载入助手提示
-- `frontend/src/components/runtime-panel.tsx` 已由文本占位升级为 `current_image` 图像承接展示，并保留运行日志、场景观测与动作结果视图
-- `frontend/src/store/workbench.ts` 已新增配置草稿、配置提交、工具刷新结果提示与对应错误反馈状态
-- `frontend/src/lib/api.ts` 已补 `PUT /api/v1/runtime/config` 与 `POST /api/v1/runtime/tools/refresh` 请求封装
-- `src/embodied_agent/backend/presenters.py` 与 `src/embodied_agent/backend/service.py` 已完成 phase3 配置合同对称化与助手元数据补充；`PUT /config` 和 `POST /tools/refresh` 已可用
-- `tests/test_backend_phase3.py` 已扩展覆盖配置写回对称性与助手元数据返回
-- 已执行 `uv run pytest tests/test_backend_phase3.py tests/test_backend_http_phase3.py tests/test_backend_run_stream_phase3.py -q`，结果 `16 passed`
-- 已执行 `npm --prefix "/e/lwj/biyesheji/frontend" run build`，结果通过；Node 版本仍提示低于 Vite 推荐下限，但不影响当前构建通过
-- 已完成浏览器联调截图与 headless 留档：`docs/records/phase3_workbench_2026-04-21.png`、`docs/records/phase3_workbench_2026-04-21_live.png`
-- 本地最小闭环基线已补齐：`scripts/phase4_local_e2e_smoke.py` 可重复验证 `bootstrap / config / tools / runs / snapshot / events` 全链路，并输出结果到 `docs/records/phase4_local_e2e_smoke_result_2026-04-21.json`
+- `frontend/src/App.tsx` 已收口为面板化工作台，真实消费 `bootstrap / config / tools / runs / snapshot / events`
+- `frontend/src/store/workbench.ts` 已稳定编排初始化、配置保存、工具刷新、run 提交、`snapshot_url` 兜底同步、SSE 订阅与断开
+- `src/embodied_agent/perception/providers.py` 已支持 `minimax_mcp_vision`、`openai_gpt4o`、`ollama_vision` 真实 provider 装配；未配置时显式回退 mock 并如实暴露 readiness
+- `src/embodied_agent/decision/providers.py` 与 `src/embodied_agent/decision/nodes.py` 已支持 `minimax`、`openai`、`ollama` 的真实 LLM 规划接入，并保留 heuristic fallback
+- `src/embodied_agent/backend/service.py`、`src/embodied_agent/backend/http.py`、`src/embodied_agent/backend/run_registry.py` 已补齐原子配置热更新、`run_id` 冲突、非法 `after_version / Last-Event-ID`、缺失 run 与终态会话回收的稳定语义
+- `frontend/tests/e2e/workbench-smoke.spec.ts` 已覆盖工作台 run smoke、设置弹窗工具刷新/配置保存与空指令本地校验
+- 当前工程化验证结果为：focused pytest `51 passed`、`npm --prefix frontend run build` 通过、Playwright e2e `3 passed`
 
 ## 交接提醒
 
 - 下一位接手者先读 `# 桌面级具身智能机器人感知-决策-执行一体化原型系统需求文档.md`
-- 再读 `docs/SESSION_START.md`
-- 再读 `docs/records/CURRENT_STATUS.md`
-- 若承接前端任务，优先读 `docs/specs/07-frontend-spec.md`、`frontend/src/App.tsx`、`frontend/src/store/workbench.ts`、`frontend/src/components/config-panel.tsx`、`frontend/src/components/control-panel.tsx`、`frontend/src/components/event-panel.tsx`、`frontend/src/lib/api.ts`、`frontend/src/lib/sse.ts`
-- 若承接后端联调任务，优先读 `src/embodied_agent/backend/http.py`、`src/embodied_agent/backend/service.py`、`src/embodied_agent/backend/run_registry.py`
-- 若追溯历史事实，优先看 `docs/records/DEVELOPMENT_LOG.md` 和 `docs/records/TEST_REPORT.md`
+- 再读 `docs/README.md`、`docs/SESSION_START.md`、`docs/records/CURRENT_STATUS.md`
+- 若承接后端 / 模型接入任务，优先读 `src/embodied_agent/perception/providers.py`、`src/embodied_agent/decision/providers.py`、`src/embodied_agent/decision/nodes.py`、`src/embodied_agent/backend/service.py`、`src/embodied_agent/backend/http.py`、`src/embodied_agent/backend/run_registry.py`
+- 若承接前端工作台任务，优先读 `frontend/src/App.tsx`、`frontend/src/store/workbench.ts`、`frontend/src/components/runtime-panel.tsx`、`frontend/src/components/event-panel.tsx`、`frontend/src/components/control-panel.tsx`、`frontend/src/components/settings-modal.tsx`
+- 若承接验证任务，优先读 `tests/test_perception_phase1.py`、`tests/test_decision_phase1.py`、`tests/test_backend_phase3.py`、`tests/test_backend_http_phase3.py`、`tests/test_backend_run_stream_phase3.py`、`frontend/tests/e2e/workbench-smoke.spec.ts`
+- 若追溯状态与完成边界，优先看 `README.md`、`docs/records/CURRENT_STATUS.md`、`docs/records/TEST_REPORT.md`、`docs/records/DEVELOPMENT_LOG.md`
 
 ## 推荐下一步
 
-1. Phase4 Agent：转入第四阶段端到端闭环调试，优先规划 Ubuntu 实机、真实后端长生命周期流式方案与真实链路验证。
-2. Documentation Agent：把本轮第三阶段完成事实、截图索引和 focused tests 结果同步进论文正文与答辩素材。
-3. QA Agent：后续补前端自动化测试、异常线程退出、长连接保活与并发场景验证。
-4. Infra Agent：补通 PowerShell 下 `uv` 命令链与 Ubuntu 启动 runbook，减少后续联调环境差异。
+1. QA / Validation Agent：把 Ubuntu / 真实链路验证做成独立验收批次，重点验证真实 provider 凭据、配置切换和长时运行稳定性。
+2. Frontend / QA Agent：继续补失败态、断流与恢复读取的 e2e / 手工验收记录，但不要为此重构现有 store 或 contract。
+3. Backend Agent：只评估长连接服务栈、主动取消与持久化演进方案，不提前展开生产级流式重构。
+4. Documentation / Thesis Agent：继续同步测试截图、运行记录、论文材料与完成边界表述，避免把“本地软件级 demo”误写成“真实硬件闭环完成”。
 
 ## 当前风险与待定项
 
-- 第三阶段前端规范功能已完成，但当前仍仅适用于 mock-first backend + 最小/增强型前端链路，不代表真实 VLM / LLM / SmolVLA / 机械臂链路已验证
-- 当前后端仍是同步 WSGI + 进程内线程骨架；SSE 回放语义已可联调，但不代表生产级长连接能力已经稳定
-- `docs/reference/INTERFACES.md` 仍不存在；当前接口口径仍需依赖 `docs/specs/07-frontend-spec.md`、backend tests、frontend 代码与 records 共同维护
-- 当前 PowerShell 仍未识别 `uv` 命令，可能影响后续按 runbook 复现实验环境
+- 当前仍以 mock execution 为边界，MCP 执行、真实机械臂动作、真实视频流与实体抓取闭环尚未实现
+- `src/embodied_agent/backend/http.py` 仍是同步 WSGI + SSE 回放骨架，`RunRegistry` 仍为进程内实现，不代表生产级流式服务已完成
+- 前端 e2e 已具备 smoke 基线，但更长链路的失败态、断流恢复与 Ubuntu 实机尚未形成完整留痕
+- 本地 Node 仍为 `20.18.0`，低于 Vite 7 推荐下限 `20.19+`，当前不阻塞构建但后续应统一环境
+- 本地 PowerShell 仍可能未识别 `uv`；若继续依赖 `uv run ...`，需先确认安装路径与环境变量
 
 ## Ubuntu / 本地最小接手路径
 
-- 后端测试：`python -m pytest tests -q`
-- 后端服务：`python -m embodied_agent.backend.http --host 127.0.0.1 --port 7860`
-- 前端依赖安装：`npm install`（目录：`frontend/`）
-- 前端开发服务器：`npm run dev`
-- 前端构建：`npm run build`
-- 如需修改代理目标：设置 `VITE_PROXY_TARGET=http://127.0.0.1:7860`
-- 如需直接指定运行时地址：设置 `VITE_RUNTIME_BASE_URL=http://127.0.0.1:7860`
-- 当前结论只适用于 mock-first backend + 最小前端骨架链路，不能视为真实前后端闭环、真实模型或真实硬件链路已验证
+- 根目录一键联调：`npm run dev`
+- focused pytest：`uv run python -m pytest tests/test_perception_phase1.py tests/test_decision_phase1.py tests/test_backend_phase3.py tests/test_backend_http_phase3.py tests/test_backend_run_stream_phase3.py`
+- 后端单独启动：`python -m embodied_agent.backend.http --host 127.0.0.1 --port 7860`
+- 前端构建：`npm --prefix frontend run build`
+- 前端浏览器回归：`npm --prefix frontend run test:e2e`
+- 如需覆盖运行时地址：设置 `EMBODIED_AGENT_HTTP_HOST`、`EMBODIED_AGENT_HTTP_PORT`、`VITE_PROXY_TARGET`、`VITE_RUNTIME_BASE_URL`
+- 当前结论仅适用于“本地软件级 demo”口径，不能外推为 MCP 执行、真实视频流、真实机械臂或生产级服务链路已完成

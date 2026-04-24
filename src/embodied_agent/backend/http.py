@@ -5,13 +5,15 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 from wsgiref.simple_server import WSGIServer, make_server
 
-from .service import FrontendRuntimeFacade, build_frontend_facade
+from .run_registry import RunConflictError
+from .service import FrontendRuntimeFacade, RuntimeConfigError, build_frontend_facade
 
 if TYPE_CHECKING:
     from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
@@ -24,6 +26,9 @@ SSE_HEADERS = [
     ("Content-Type", "text/event-stream; charset=utf-8"),
     ("Cache-Control", "no-cache"),
 ]
+DEFAULT_HTTP_HOST = os.environ.get("EMBODIED_AGENT_HTTP_HOST", "127.0.0.1")
+DEFAULT_HTTP_PORT = int(os.environ.get("EMBODIED_AGENT_HTTP_PORT", "7860"))
+ALLOWED_ORIGIN = os.environ.get("EMBODIED_AGENT_ALLOWED_ORIGIN", "")
 
 
 class HTTPRequestError(Exception):
@@ -41,18 +46,21 @@ class BackendHTTPApp:
     def __call__(self, environ: WSGIEnvironment, start_response: StartResponse) -> list[bytes]:
         method = str(environ.get("REQUEST_METHOD", "GET")).upper()
         path = str(environ.get("PATH_INFO", ""))
+        origin = self._resolve_origin(environ)
         try:
+            if method == "OPTIONS":
+                return self._respond_empty(start_response, 204, origin=origin)
             if method == "GET" and path == "/api/v1/runtime/bootstrap":
-                return self._respond(start_response, 200, self.facade.get_bootstrap())
+                return self._respond(start_response, 200, self.facade.get_bootstrap(), origin=origin)
             if method == "GET" and path == "/api/v1/runtime/config":
-                return self._respond(start_response, 200, self.facade.get_config())
+                return self._respond(start_response, 200, self.facade.get_config(), origin=origin)
             if method == "GET" and path == "/api/v1/runtime/tools":
-                return self._respond(start_response, 200, self.facade.get_tools())
+                return self._respond(start_response, 200, self.facade.get_tools(), origin=origin)
             if method == "POST" and path == "/api/v1/runtime/tools/refresh":
-                return self._respond(start_response, 200, self.facade.refresh_tools())
+                return self._respond(start_response, 200, self.facade.refresh_tools(), origin=origin)
             if method == "PUT" and path == "/api/v1/runtime/config":
                 payload = self._read_json_body(environ)
-                return self._respond(start_response, 200, self.facade.update_config(payload))
+                return self._respond(start_response, 200, self.facade.update_config(payload), origin=origin)
             if method == "POST" and path == "/api/v1/runtime/run":
                 payload = self._read_json_body(environ)
                 instruction = self._extract_instruction(payload)
@@ -61,6 +69,7 @@ class BackendHTTPApp:
                     start_response,
                     200,
                     self.facade.run_instruction(instruction=instruction, run_id=run_id),
+                    origin=origin,
                 )
             if method == "POST" and path == "/api/v1/runtime/runs":
                 payload = self._read_json_body(environ)
@@ -70,32 +79,36 @@ class BackendHTTPApp:
                     start_response,
                     202,
                     self.facade.start_run(instruction=instruction, run_id=run_id),
+                    origin=origin,
                 )
             run_id = self._match_run_snapshot_path(path)
             if method == "GET" and run_id is not None:
-                return self._respond(start_response, 200, self.facade.get_run(run_id=run_id))
+                return self._respond(start_response, 200, self.facade.get_run(run_id=run_id), origin=origin)
             run_id = self._match_run_events_path(path)
             if method == "GET" and run_id is not None:
                 after_version = self._extract_after_version(environ)
                 events = self.facade.iter_run_events(run_id=run_id, after_version=after_version)
-                return self._respond_sse(start_response, events)
+                return self._respond_sse(start_response, events, origin=origin)
             raise HTTPRequestError(
                 status_code=404,
                 code="EndpointNotFound",
                 message=f"unsupported route: {method} {path}",
             )
         except KeyError:
-            return self._respond_error(start_response, 404, code="RunNotFound", message="run_id 不存在")
-        except ValueError as exc:
-            return self._respond_error(start_response, 409, code="RunAlreadyExists", message=str(exc))
+            return self._respond_error(start_response, 404, code="RunNotFound", message="run_id 不存在", origin=origin)
+        except RunConflictError as exc:
+            return self._respond_error(start_response, 409, code="RunAlreadyExists", message=str(exc), origin=origin)
+        except RuntimeConfigError as exc:
+            return self._respond_error(start_response, 400, code=exc.code, message=exc.message, origin=origin)
         except HTTPRequestError as exc:
-            return self._respond_error(start_response, exc.status_code, code=exc.code, message=exc.message)
+            return self._respond_error(start_response, exc.status_code, code=exc.code, message=exc.message, origin=origin)
         except Exception:
             return self._respond_error(
                 start_response,
                 500,
                 code="RuntimeUnavailable",
                 message="运行服务暂时不可用",
+                origin=origin,
             )
 
     def _read_json_body(self, environ: WSGIEnvironment) -> dict[str, Any]:
@@ -162,23 +175,71 @@ class BackendHTTPApp:
         *,
         code: str,
         message: str,
+        origin: str | None = None,
     ) -> list[bytes]:
         payload = self.facade.build_error(code=code, message=message)
-        return self._respond(start_response, status_code, payload)
+        return self._respond(start_response, status_code, payload, origin=origin)
 
     @staticmethod
-    def _respond(start_response: StartResponse, status_code: int, payload: Any) -> list[bytes]:
+    def _respond(
+        start_response: StartResponse,
+        status_code: int,
+        payload: Any,
+        *,
+        origin: str | None = None,
+    ) -> list[bytes]:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        headers = [*JSON_HEADERS, ("Content-Length", str(len(body)))]
+        headers = [*JSON_HEADERS, ("Content-Length", str(len(body))), *BackendHTTPApp._cors_headers(origin)]
         start_response(f"{status_code} {BackendHTTPApp._status_text(status_code)}", headers)
         return [body]
 
     @staticmethod
-    def _respond_sse(start_response: StartResponse, events: list[dict[str, Any]]) -> list[bytes]:
+    def _respond_sse(
+        start_response: StartResponse,
+        events: list[dict[str, Any]],
+        *,
+        origin: str | None = None,
+    ) -> list[bytes]:
         body = b"".join(BackendHTTPApp._encode_sse_event(event) for event in events)
-        headers = [*SSE_HEADERS, ("Content-Length", str(len(body)))]
+        headers = [*SSE_HEADERS, ("Content-Length", str(len(body))), *BackendHTTPApp._cors_headers(origin)]
         start_response("200 OK", headers)
         return [body]
+
+    @staticmethod
+    def _respond_empty(
+        start_response: StartResponse,
+        status_code: int,
+        *,
+        origin: str | None = None,
+    ) -> list[bytes]:
+        headers = [
+            ("Content-Length", "0"),
+            *BackendHTTPApp._cors_headers(origin),
+        ]
+        start_response(f"{status_code} {BackendHTTPApp._status_text(status_code)}", headers)
+        return [b""]
+
+    @staticmethod
+    def _resolve_origin(environ: WSGIEnvironment) -> str | None:
+        request_origin = str(environ.get("HTTP_ORIGIN", "")).strip()
+        if not request_origin:
+            return None
+        if ALLOWED_ORIGIN:
+            return ALLOWED_ORIGIN
+        parsed = urlparse(request_origin)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return None
+
+    @staticmethod
+    def _cors_headers(origin: str | None) -> list[tuple[str, str]]:
+        if not origin:
+            return []
+        return [
+            ("Access-Control-Allow-Origin", origin),
+            ("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS"),
+            ("Access-Control-Allow-Headers", "Content-Type,Last-Event-ID"),
+        ]
 
     @staticmethod
     def _encode_sse_event(event: dict[str, Any]) -> bytes:
@@ -267,8 +328,8 @@ def build_http_app_from_config(config_path: str | Path) -> BackendHTTPApp:
 def serve_http_app(
     app: WSGIApplication,
     *,
-    host: str = "127.0.0.1",
-    port: int = 7860,
+    host: str = DEFAULT_HTTP_HOST,
+    port: int = DEFAULT_HTTP_PORT,
     server_factory: Callable[..., WSGIServer] = make_server,
 ) -> WSGIServer:
     return server_factory(host, port, app)
@@ -277,8 +338,8 @@ def serve_http_app(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the phase-3 backend HTTP skeleton")
     parser.add_argument("--config", type=str, default=None, help="配置文件路径")
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="HTTP 服务监听地址")
-    parser.add_argument("--port", type=int, default=7860, help="HTTP 服务监听端口")
+    parser.add_argument("--host", type=str, default=DEFAULT_HTTP_HOST, help="HTTP 服务监听地址")
+    parser.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT, help="HTTP 服务监听端口")
     return parser
 
 

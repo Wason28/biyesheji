@@ -4,16 +4,20 @@ interface PanelShellProps extends PropsWithChildren {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  className?: string;
+  compact?: boolean;
 }
 
 export function PanelShell({
   title,
   subtitle,
   actions,
+  className,
+  compact = false,
   children,
 }: PanelShellProps) {
   return (
-    <section className="panel-shell">
+    <section className={["panel-shell", compact ? "panel-shell--compact" : "", className || ""].filter(Boolean).join(" ")}>
       <header className="panel-shell__header">
         <div>
           <h2>{title}</h2>

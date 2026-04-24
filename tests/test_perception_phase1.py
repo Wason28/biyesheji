@@ -1,3 +1,5 @@
+import json
+
 from embodied_agent.perception.adapters import build_camera_adapter, build_robot_state_adapter
 from embodied_agent.perception.config import PerceptionRuntimeConfig, build_perception_runtime_config
 from embodied_agent.perception.contracts import (
@@ -10,9 +12,16 @@ from embodied_agent.perception.errors import (
     VLMAuthenticationError,
     VLMRateLimitError,
     VLMResponseFormatError,
+    VLMServiceUnavailableError,
 )
 from embodied_agent.perception.mocks import MockCamera, MockRobotStateClient
-from embodied_agent.perception.providers import MockVLMProvider, ProviderSettings, register_vlm_provider
+from embodied_agent.perception.providers import (
+    MockVLMProvider,
+    OllamaVisionProvider,
+    OpenAICompatibleVisionProvider,
+    ProviderSettings,
+    build_vlm_provider,
+)
 from embodied_agent.perception.server import PerceptionMCPServer, build_server
 
 
@@ -189,9 +198,11 @@ def test_perception_server_success_envelope_includes_runtime_summary(app_config)
                 structured_observations={"objects": {}, "relations": [], "robot_grasp_state": "open", "risk_flags": []},
             )
 
-    register_vlm_provider("ollama_vision", lambda settings: _BrokenProvider(settings))
     app_config.perception.vlm_provider = "ollama_vision"
-    server = PerceptionMCPServer(app_config)
+    server = PerceptionMCPServer(
+        app_config,
+        provider_factory=lambda config: _BrokenProvider(ProviderSettings.from_perception_config(config)),
+    )
 
     response = server.call_tool("describe_scene", {"image": "ZmFrZV9pbWFnZQ=="})
 
@@ -245,8 +256,10 @@ def test_mock_provider_supports_rate_limit_failure_mode() -> None:
         raise AssertionError("expected VLMRateLimitError")
 
 
-def test_mock_provider_supports_invalid_response_failure_mode() -> None:
-    provider = MockVLMProvider(
+
+
+def test_build_vlm_provider_uses_mock_fallback_when_remote_provider_is_unconfigured() -> None:
+    provider = build_vlm_provider(
         ProviderSettings(
             provider="openai_gpt4o",
             model="gpt-4o",
@@ -256,13 +269,178 @@ def test_mock_provider_supports_invalid_response_failure_mode() -> None:
             timeout_s=15.0,
             max_retries=2,
             max_tokens=512,
+        )
+    )
+
+    assert isinstance(provider, MockVLMProvider)
+    summary = provider.config_summary()
+    assert summary["mode"] == "mock_fallback"
+    assert summary["configured"] is False
+    assert "fallback_reason" in summary
+
+
+
+def test_build_vlm_provider_uses_openai_compatible_provider_when_configured() -> None:
+    provider = build_vlm_provider(
+        ProviderSettings(
+            provider="openai_gpt4o",
+            model="gpt-4o",
+            api_key="secret",
+            local_path="",
+            base_url="",
+            timeout_s=15.0,
+            max_retries=2,
+            max_tokens=512,
+        )
+    )
+
+    assert isinstance(provider, OpenAICompatibleVisionProvider)
+    assert provider.endpoint == "https://api.openai.com/v1/chat/completions"
+
+
+
+def test_build_vlm_provider_uses_ollama_provider_when_local_endpoint_is_available() -> None:
+    provider = build_vlm_provider(
+        ProviderSettings(
+            provider="ollama_vision",
+            model="llava:7b",
+            api_key="",
+            local_path="./models/llava",
+            base_url="",
+            timeout_s=15.0,
+            max_retries=2,
+            max_tokens=512,
+        )
+    )
+
+    assert isinstance(provider, OllamaVisionProvider)
+    assert provider.endpoint == "http://127.0.0.1:11434/api/chat"
+
+
+
+def test_openai_compatible_provider_parses_structured_json_response() -> None:
+    captured: dict[str, object] = {}
+
+    def transport(method: str, url: str, headers: dict[str, str], body: bytes, timeout_s: float):
+        captured["method"] = method
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["body"] = json.loads(body.decode("utf-8"))
+        captured["timeout_s"] = timeout_s
+        response_body = json.dumps(
+            {
+                "model": "gpt-4o",
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "scene_description": "桌面上有一个红色方块。",
+                                    "confidence": 0.83,
+                                    "structured_observations": {
+                                        "objects": [
+                                            {
+                                                "name": "cube",
+                                                "category": "target_object",
+                                                "position_hint": "front_center",
+                                                "graspable": True,
+                                            }
+                                        ],
+                                        "relations": ["cube is in front of the gripper"],
+                                        "robot_grasp_state": "open",
+                                        "risk_flags": [],
+                                    },
+                                },
+                                ensure_ascii=False,
+                            )
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 50},
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return 200, {"Content-Type": "application/json"}, response_body
+
+    provider = OpenAICompatibleVisionProvider(
+        ProviderSettings(
+            provider="openai_gpt4o",
+            model="gpt-4o",
+            api_key="secret",
+            local_path="",
+            base_url="",
+            timeout_s=8.0,
+            max_retries=2,
+            max_tokens=256,
         ),
-        fail_mode="invalid_response",
+        endpoint="https://api.openai.com/v1/chat/completions",
+        transport=transport,
+    )
+
+    result = provider.describe_scene(SceneDescriptionRequest(image="ZmFrZV9pbWFnZQ==", prompt="分析场景"))
+
+    assert captured["method"] == "POST"
+    assert captured["url"] == "https://api.openai.com/v1/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer secret"
+    assert captured["body"]["response_format"] == {"type": "json_object"}
+    assert result.scene_description == "桌面上有一个红色方块。"
+    assert result.structured_observations["objects"][0]["name"] == "cube"
+    assert result.provider_metadata["mode"] == "remote"
+    assert result.provider_metadata["usage"]["prompt_tokens"] == 100
+
+
+
+def test_openai_compatible_provider_maps_auth_failure() -> None:
+    def transport(method: str, url: str, headers: dict[str, str], body: bytes, timeout_s: float):
+        return 401, {"Content-Type": "application/json"}, b'{"error":"unauthorized"}'
+
+    provider = OpenAICompatibleVisionProvider(
+        ProviderSettings(
+            provider="openai_gpt4o",
+            model="gpt-4o",
+            api_key="secret",
+            local_path="",
+            base_url="",
+            timeout_s=8.0,
+            max_retries=2,
+            max_tokens=256,
+        ),
+        endpoint="https://api.openai.com/v1/chat/completions",
+        transport=transport,
     )
 
     try:
         provider.describe_scene(SceneDescriptionRequest(image="ZmFrZV9pbWFnZQ=="))
-    except VLMResponseFormatError as exc:
-        assert exc.code == "PERCEPTION_VLM_INVALID_RESPONSE"
+    except VLMAuthenticationError as exc:
+        assert exc.code == "PERCEPTION_VLM_AUTHENTICATION_FAILURE"
     else:
-        raise AssertionError("expected VLMResponseFormatError")
+        raise AssertionError("expected VLMAuthenticationError")
+
+
+
+def test_ollama_provider_maps_service_unavailable() -> None:
+    def transport(method: str, url: str, headers: dict[str, str], body: bytes, timeout_s: float):
+        raise ConnectionError("connection refused")
+
+    provider = OllamaVisionProvider(
+        ProviderSettings(
+            provider="ollama_vision",
+            model="llava:7b",
+            api_key="",
+            local_path="./models/llava",
+            base_url="http://127.0.0.1:11434",
+            timeout_s=5.0,
+            max_retries=1,
+            max_tokens=128,
+        ),
+        endpoint="http://127.0.0.1:11434/api/chat",
+        transport=transport,
+    )
+
+    try:
+        provider.describe_scene(SceneDescriptionRequest(image="ZmFrZV9pbWFnZQ=="))
+    except VLMServiceUnavailableError as exc:
+        assert exc.code == "PERCEPTION_VLM_SERVICE_UNAVAILABLE"
+    else:
+        raise AssertionError("expected VLMServiceUnavailableError")

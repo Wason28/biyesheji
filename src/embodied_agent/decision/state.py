@@ -1,4 +1,4 @@
-"""Decision-layer state helpers aligned with shared state definitions."""
+"""Decision-layer state helpers aligned with the blueprint workflow."""
 
 from __future__ import annotations
 
@@ -6,10 +6,29 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, TypedDict
 
 from ..shared.types import AgentState as SharedAgentState
-from ..shared.types import ExecutionResult, RobotState
+from ..shared.types import ExecutionResult, RobotState, RunPhase
 
 DEFAULT_MAX_ITERATIONS = 10
 DEFAULT_HISTORY_LIMIT = 100
+BLUEPRINT_PHASES: tuple[RunPhase, ...] = (
+    "trigger",
+    "nlu",
+    "sensory",
+    "assessment",
+    "active_perception",
+    "task_planning",
+    "pre_feedback",
+    "motion_control",
+    "verification",
+    "error_diagnosis",
+    "hri",
+    "compensation",
+    "success_notice",
+    "goal_check",
+    "state_compression",
+    "final_status",
+)
+TERMINAL_PHASE: RunPhase = "final_status"
 
 
 class NodeOutcome(TypedDict, total=False):
@@ -27,11 +46,29 @@ class DecisionMetrics(TypedDict, total=False):
 
 
 class DecisionAgentState(SharedAgentState, total=False):
+    current_phase: RunPhase
+    goal: str
+    intent: dict[str, Any]
     scene_observations: dict[str, Any]
+    perception_confidence: float
+    assessment_result: dict[str, Any]
+    active_perception_attempts: int
     selected_capability: str
     selected_capability_args: dict[str, Any]
     selected_action: str
     selected_action_args: dict[str, Any]
+    plan: list[dict[str, Any]]
+    current_plan_step: dict[str, Any]
+    pre_execution_feedback: dict[str, Any]
+    execution_feedback: dict[str, Any]
+    verification_result: dict[str, Any]
+    error_diagnosis: dict[str, Any]
+    human_intervention: dict[str, Any]
+    retry_context: dict[str, Any]
+    memory_summary: dict[str, Any]
+    goal_check_result: dict[str, Any]
+    final_report: dict[str, Any]
+    termination_reason: str
     last_execution: ExecutionResult
     last_node_result: NodeOutcome
     max_iterations: int
@@ -43,7 +80,6 @@ def _utc_now_iso() -> str:
 
 
 def empty_robot_state() -> RobotState:
-    """Return the baseline robot state compatible with shared.types."""
     return {
         "joint_positions": [],
         "ee_pose": {},
@@ -81,6 +117,20 @@ def _coerce_history(value: Any) -> list[dict[str, Any]]:
     return normalized_history
 
 
+def _coerce_mapping(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _coerce_plan(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, Mapping):
+            normalized.append(dict(item))
+    return normalized
+
+
 def _coerce_metrics(value: Any) -> DecisionMetrics:
     if not isinstance(value, Mapping):
         return {
@@ -96,6 +146,12 @@ def _coerce_metrics(value: Any) -> DecisionMetrics:
     }
 
 
+def _coerce_phase(value: Any) -> RunPhase:
+    if isinstance(value, str) and value in BLUEPRINT_PHASES:
+        return value  # type: ignore[return-value]
+    return "trigger"
+
+
 def create_initial_state(
     user_instruction: str,
     *,
@@ -103,7 +159,6 @@ def create_initial_state(
     current_image: str = "",
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
 ) -> DecisionAgentState:
-    """Create the minimal decision state entry compatible with shared AgentState."""
     state: DecisionAgentState = {
         "user_instruction": user_instruction.strip(),
         "task_queue": [],
@@ -112,6 +167,12 @@ def create_initial_state(
         "robot_state": robot_state or empty_robot_state(),
         "scene_description": "",
         "scene_observations": {},
+        "current_phase": "trigger",
+        "goal": user_instruction.strip(),
+        "intent": {},
+        "perception_confidence": 0.0,
+        "assessment_result": {},
+        "active_perception_attempts": 0,
         "action_result": "in_progress",
         "iteration_count": 0,
         "conversation_history": [],
@@ -119,6 +180,18 @@ def create_initial_state(
         "selected_capability_args": {},
         "selected_action": "",
         "selected_action_args": {},
+        "plan": [],
+        "current_plan_step": {},
+        "pre_execution_feedback": {},
+        "execution_feedback": {},
+        "verification_result": {},
+        "error_diagnosis": {},
+        "human_intervention": {},
+        "retry_context": {"attempts": 0},
+        "memory_summary": {},
+        "goal_check_result": {},
+        "final_report": {},
+        "termination_reason": "",
         "last_execution": {
             "status": "in_progress",
             "action_name": "",
@@ -126,9 +199,9 @@ def create_initial_state(
             "logs": [],
         },
         "last_node_result": {
-            "node": "bootstrap",
+            "node": "trigger",
             "status_code": 200,
-            "message": "state initialized",
+            "message": "交互触发已就绪",
             "metadata": {},
             "timestamp": _utc_now_iso(),
         },
@@ -140,7 +213,7 @@ def create_initial_state(
         node="bootstrap",
         message="初始化决策状态",
         status="ready",
-        metadata={"max_iterations": max_iterations},
+        metadata={"max_iterations": max_iterations, "phase": "trigger"},
     )
 
 
@@ -149,7 +222,6 @@ def ensure_agent_state(
     *,
     max_iterations: int | None = None,
 ) -> DecisionAgentState:
-    """Normalize any incoming state into the decision-layer state shape."""
     normalized: DecisionAgentState = {
         "user_instruction": str(state.get("user_instruction", "")).strip(),
         "task_queue": [str(item) for item in state.get("task_queue", []) if str(item).strip()],
@@ -157,14 +229,32 @@ def ensure_agent_state(
         "current_image": str(state.get("current_image", "")),
         "robot_state": _coerce_robot_state(state.get("robot_state")),
         "scene_description": str(state.get("scene_description", "")),
-        "scene_observations": dict(state.get("scene_observations", {})),
+        "scene_observations": _coerce_mapping(state.get("scene_observations")),
+        "current_phase": _coerce_phase(state.get("current_phase")),
+        "goal": str(state.get("goal", state.get("user_instruction", ""))).strip(),
+        "intent": _coerce_mapping(state.get("intent")),
+        "perception_confidence": float(state.get("perception_confidence", 0.0) or 0.0),
+        "assessment_result": _coerce_mapping(state.get("assessment_result")),
+        "active_perception_attempts": int(state.get("active_perception_attempts", 0)),
         "action_result": state.get("action_result", "in_progress"),
         "iteration_count": int(state.get("iteration_count", 0)),
         "conversation_history": _coerce_history(state.get("conversation_history")),
         "selected_capability": str(state.get("selected_capability", "")).strip(),
-        "selected_capability_args": dict(state.get("selected_capability_args", {})),
+        "selected_capability_args": _coerce_mapping(state.get("selected_capability_args")),
         "selected_action": str(state.get("selected_action", "")).strip(),
-        "selected_action_args": dict(state.get("selected_action_args", {})),
+        "selected_action_args": _coerce_mapping(state.get("selected_action_args")),
+        "plan": _coerce_plan(state.get("plan")),
+        "current_plan_step": _coerce_mapping(state.get("current_plan_step")),
+        "pre_execution_feedback": _coerce_mapping(state.get("pre_execution_feedback")),
+        "execution_feedback": _coerce_mapping(state.get("execution_feedback")),
+        "verification_result": _coerce_mapping(state.get("verification_result")),
+        "error_diagnosis": _coerce_mapping(state.get("error_diagnosis")),
+        "human_intervention": _coerce_mapping(state.get("human_intervention")),
+        "retry_context": _coerce_mapping(state.get("retry_context")),
+        "memory_summary": _coerce_mapping(state.get("memory_summary")),
+        "goal_check_result": _coerce_mapping(state.get("goal_check_result")),
+        "final_report": _coerce_mapping(state.get("final_report")),
+        "termination_reason": str(state.get("termination_reason", "")),
         "last_execution": dict(state.get("last_execution", {})),
         "last_node_result": dict(state.get("last_node_result", {})),
         "max_iterations": int(
@@ -189,12 +279,15 @@ def ensure_agent_state(
 
     if not normalized["last_node_result"]:
         normalized["last_node_result"] = {
-            "node": "state_loader",
+            "node": normalized["current_phase"],
             "status_code": 200,
             "message": "state normalized",
             "metadata": {},
             "timestamp": _utc_now_iso(),
         }
+
+    if not normalized["retry_context"]:
+        normalized["retry_context"] = {"attempts": 0}
 
     return normalized
 
@@ -208,7 +301,6 @@ def append_history(
     metadata: dict[str, Any] | None = None,
     history_limit: int = DEFAULT_HISTORY_LIMIT,
 ) -> DecisionAgentState:
-    """Append a bounded history record and return a copied state."""
     copied_state: DecisionAgentState = dict(state)
     history = list(copied_state.get("conversation_history", []))
     history.append(
@@ -232,7 +324,6 @@ def set_last_node_result(
     message: str,
     metadata: dict[str, Any] | None = None,
 ) -> DecisionAgentState:
-    """Set a normalized node result envelope on a copied state."""
     copied_state: DecisionAgentState = dict(state)
     copied_state["last_node_result"] = {
         "node": node,
@@ -241,6 +332,7 @@ def set_last_node_result(
         "metadata": metadata or {},
         "timestamp": _utc_now_iso(),
     }
+    copied_state["current_phase"] = _coerce_phase(node)
     return copied_state
 
 
@@ -250,7 +342,6 @@ def record_node_duration(
     node: str,
     duration_ms: float,
 ) -> DecisionAgentState:
-    """Track node timing in debug metrics without mutating the input state."""
     copied_state: DecisionAgentState = dict(state)
     metrics = _coerce_metrics(copied_state.get("debug_metrics"))
     node_durations = dict(metrics.get("node_durations_ms", {}))
@@ -267,7 +358,6 @@ def record_tool_call(
     ok: bool,
     metadata: dict[str, Any] | None = None,
 ) -> DecisionAgentState:
-    """Track MCP tool usage for observability."""
     copied_state: DecisionAgentState = dict(state)
     metrics = _coerce_metrics(copied_state.get("debug_metrics"))
     tool_calls = list(metrics.get("tool_calls", []))
@@ -280,5 +370,13 @@ def record_tool_call(
         }
     )
     metrics["tool_calls"] = tool_calls[-DEFAULT_HISTORY_LIMIT:]
+    copied_state["debug_metrics"] = metrics
+    return copied_state
+
+
+def record_decision_cycle(state: DecisionAgentState) -> DecisionAgentState:
+    copied_state: DecisionAgentState = dict(state)
+    metrics = _coerce_metrics(copied_state.get("debug_metrics"))
+    metrics["decision_cycles"] = int(metrics.get("decision_cycles", 0)) + 1
     copied_state["debug_metrics"] = metrics
     return copied_state

@@ -2,8 +2,91 @@
 
 ## 文档定位
 
-本文档记录当前里程碑的测试范围、执行命令、真实结果、剩余风险与历史回归事实。
-当前口径以“第三阶段前端工程骨架已落地、`npm run build` 通过、最小 backend 合同已冻结”为准。测试目标是证明最小后端合同、运行 facade、run registry、HTTP / SSE 传输层、前端构建门禁与页面消费接线在当前里程碑下具备可回归依据，而不是证明真实浏览器前后端联调、长生命周期流式服务或硬件闭环已经完成。
+本文档记录当前里程碑的测试范围、执行命令、真实结果、剩余风险与回归事实。
+当前口径以“项目已补齐为本地软件级 embodied-agent demo”为准。测试目标是证明前端工作台、后端运行时、真实模型接入层与工程化验证已经形成可重复回归依据，而不是证明 MCP 执行、真实硬件、真实视频流或生产级流式服务已经完成。
+
+## 当前阶段测试范围
+
+本阶段测试内容：
+- 测试 `perception/providers.py` 的真实 provider 装配、mock fallback 与错误映射
+- 测试 `decision/providers.py` 与 `decision/nodes.py` 的真实 LLM 规划接入与 heuristic fallback
+- 测试 `backend/service.py`、`backend/http.py`、`backend/run_registry.py` 的运行时生命周期、原子配置热更新、错误码与 SSE 回放边界
+- 测试前端工作台对 `bootstrap / config / tools / runs / snapshot / events` 的真实消费路径、设置弹窗、控制面板与事件日志
+- 验证前端工程 `npm --prefix frontend run build` 可通过
+- 验证前端 Playwright smoke / e2e 可通过
+
+本阶段明确不测：
+- 不测 MCP 执行、真实机械臂抓取、真实视频流或实体分拣闭环
+- 不测生产级 WebSocket、跨进程会话治理、持久化恢复与高并发压测
+- 不测 Ubuntu 实机、真实时延、真实摄像头噪声与真实 `SmolVLA` 权重表现
+
+## 当前测试分层
+
+### 1. 单元 / 合同测试
+
+目标：
+- 验证感知 provider、决策 provider 与回退策略保持稳定
+- 验证后端合同字段、错误码与前端展示载荷保持稳定
+
+### 2. 集成 / 传输测试
+
+目标：
+- 验证统一入口 runtime 装配、运行 facade、HTTP / SSE 与 run registry 生命周期边界
+- 验证配置更新失败时不会污染当前 runtime
+
+### 3. 前端构建 / 浏览器回归
+
+目标：
+- 验证前端工程可构建
+- 验证工作台 smoke、设置弹窗、工具刷新、配置保存与本地输入校验
+
+## 当前测试范围快照
+
+| 模块 | 测试级别 | 当前结果 | 结论 |
+| --- | --- | --- | --- |
+| `tests/test_perception_phase1.py` | 单元 / 合同 | 19/19 通过 | 通过 |
+| `tests/test_decision_phase1.py` | 单元 / 合同 | 10/10 通过 | 通过 |
+| `tests/test_backend_phase3.py` | 集成 / 运行时 | 9/9 通过 | 通过 |
+| `tests/test_backend_http_phase3.py` | 集成 / HTTP / SSE | 7/7 通过 | 通过 |
+| `tests/test_backend_run_stream_phase3.py` | 集成 / stream | 6/6 通过 | 通过 |
+| `frontend/tests/e2e/workbench-smoke.spec.ts` | 浏览器 e2e | 3/3 通过 | 通过 |
+| `frontend` 构建 | 构建门禁 | 通过 | 通过 |
+
+## 本轮执行命令与结果
+
+- 命令：`uv run python -m pytest tests/test_perception_phase1.py tests/test_decision_phase1.py tests/test_backend_phase3.py tests/test_backend_http_phase3.py tests/test_backend_run_stream_phase3.py`
+- 结果：通过
+- 汇总：`51 passed in 1.25s`
+- 说明：确认真实 provider 接入、heuristic fallback、后端生命周期与 HTTP / SSE 边界均可回归
+
+- 命令：`uv run python -m compileall src/embodied_agent`
+- 结果：通过
+- 说明：确认当前 Python 包可完成语法级编译检查
+
+- 命令：`npm --prefix frontend run build`
+- 结果：通过
+- 说明：Vite 7 提示当前 Node `20.18.0` 低于推荐下限 `20.19+`，但本轮构建仍成功
+
+- 命令：`npm --prefix frontend run test:e2e`
+- 结果：通过
+- 汇总：`3 passed in 9.3s`
+- 覆盖范围：
+  - 工作台启动并完成一次 run
+  - 设置弹窗中的配置刷新、工具刷新、助手显示与配置保存
+  - 控制面板空指令本地校验
+
+## 当前风险与缺口
+
+- 当前自动化验证仍以本地软件级 demo 为边界，不覆盖 MCP 执行、真实硬件与真实视频流
+- 当前 HTTP / SSE 传输仍为同步 WSGI + 进程内线程模型，未覆盖生产级并发与持久化恢复
+- 前端 e2e 目前聚焦 smoke 与关键交互，尚未覆盖更长链路的失败态与断流恢复
+- Ubuntu 实机、真实 provider 凭据与长时间运行留痕仍待后续验收
+
+## 当前结论
+
+- 当前项目已经具备“本地软件级 embodied-agent demo”的自动化验证基础：后端 focused pytest、前端构建和浏览器 e2e 均已通过
+- 当前测试结果支持这样的表述：前端工作台、后端运行时、真实模型接入层与工程化测试已经补齐到可本地运行、可观测、可回归的状态
+- 当前测试结果不支持把项目表述为：MCP 执行完成、真实机械臂闭环完成、真实视频流完成或生产级流式服务完成
 
 ## 当前阶段测试范围
 
@@ -15,10 +98,11 @@
 - 测试 `adapters/mcp_gateway.py` 对感知层与执行层响应 envelope 的统一桥接
 - 评估 `frontend/src/App.tsx`、`store/workbench.ts`、`components/*`、`lib/api.ts`、`lib/sse.ts` 对 `bootstrap / config / tools / runs / snapshot / events` 的最小消费接线是否齐备
 - 验证前端工程 `npm run build` 可通过，确保第三阶段最小工作台至少达到可构建、可交付静态产物的门禁
+- 验证根目录 `npm run dev` 可启动前后端本地联调链路，并确认 execution flow 在真实事件输入下可见变化
 - 回归决策层、感知层、执行层现有 mock-first 合同，确保第三阶段新增后端层未破坏前两阶段基线
 
 本阶段明确不测：
-- 不测真实 HTTP 长连接治理、生产级 SSE、WebSocket、浏览器侧自动重连与 run 过程持续推送稳定性
+- 不测真实浏览器自动化、生产级长连接治理、WebSocket、断线自动重连与 run 过程持续推送稳定性
 - 不测真实浏览器联调录屏、端到端 UI 自动化、真实页面交互留痕与前后端联调实测
 - 不测真实 `VLM / LLM / SmolVLA / 机械臂`、真实相机噪声、真实时延与实物分拣
 - 不测生产级部署、鉴权、中间件、并发压测与持久化
@@ -119,10 +203,24 @@
   - 结论：确认 mock-first 前后端本地闭环可重复验收，配置保存、工具刷新、run 终态与事件流回放均可自动探测
 - 结论：第三阶段“前端界面开发与 MCP 工具集成”已完成；并已建立第四阶段前置的“本地最小闭环”基线，但该完成边界仍限定在 mock-first backend + 本地联调，不外推为真实硬件、真实视频流或生产级流式服务完成
 
+### 2026-04-24 本地联调入口与 execution flow 可视化修正验证
+
+- 类型：前端构建验证 + 本地 `dev` 联调 + UI 行为诊断
+- 执行命令：`npm --prefix frontend run build`
+- 结果：通过
+- 备注：Node 当前为 `20.18.0`，Vite 7 会提示建议升级到 `20.19+` 或 `22.12+`，但本轮构建仍成功
+- 联调事实：
+  - 根目录 `npm run dev` 可同时启动 backend 与 frontend
+  - Vite 本地地址为 `http://localhost:5173/`
+  - backend 已在当前链路下成功响应 `bootstrap / config / tools / runs / snapshot / events`
+  - `frontend/src/store/workbench.ts` 已改为先建 SSE 再使用 `snapshot_url` 兜底，避免 run 过快时界面直接跳终态
+  - `frontend/src/App.tsx` 中部执行流已按真实 `eventFeed + current_phase` 计算节点 `idle / active / done / failed`，不再依赖 demo 定时轮播
+- 结论：当前“任务执行流不动”问题已定位并通过前端接线修正；但这仍属于 mock-first 本地联调事实，不代表真实长时流式服务已验证
+
 ## 当前风险与缺口
 - 当前 run 状态推送依赖进程内 `RunRegistry + Thread`，未覆盖多进程部署、会话清理、并发竞争与持久化恢复
 - 当前已覆盖重复 `run_id`、非法负数 `after_version / Last-Event-ID` 与终态过期清理，但仍未覆盖高频轮询、异常线程退出、一致性抖动与 `max_terminal_sessions` 溢出淘汰
-- 当前前端仅完成代码/构建级验证，尚无浏览器级联调记录、页面截图、录屏或端到端自动化，真实联调阶段仍有接口集成风险
+- 当前已完成本地人工 live 联调与截图留痕，但浏览器自动化、长时间运行留痕与端到端 e2e 仍未建立，真实联调阶段仍有回归风险
 - 当前前端错误提示依赖后端返回的 `error.message`，尚未形成按 `error.code` 做专门 UI 文案分流的策略
 - 当前全量测试全部基于 mock-first 运行时，不代表真实模型、真实相机、真实机械臂与真实时延条件
 - 当前环境下 `python -m pytest` 可用；若后续要求统一改回 `uv run ...`，需先恢复 `uv` 命令链可执行性
@@ -130,8 +228,8 @@
 ## 当前结论
 
 - 第三阶段当前测试目标已扩展到前端最小工作台：run 生命周期收口、最小 HTTP / SSE 路由、后端 facade、统一入口装配与既有 mock 闭环全部通过回归，前端工程也已通过构建门禁
-- 当前前端最小联调口径结论为：按代码/构建口径 `FE-A01 ~ FE-A09` 具备 9/9 项实现落点，可判定为“代码接线通过”；按真实浏览器联调留痕口径仍未开始，不得表述为“真实前后端联调已完成”
-- 下一阶段测试优先级应聚焦浏览器级联调留痕、长生命周期流式推送方案、异常线程退出、`max_terminal_sessions` 淘汰、并发场景、前后端联调合同与 Ubuntu 实机验证
+- 当前前端最小联调口径结论为：按代码/构建口径 `FE-A01 ~ FE-A09` 具备 9/9 项实现落点；按本地人工联调口径，`bootstrap / config / tools / runs / snapshot / events` 已完成 live 验证，execution flow 也已能随真实事件变化；但浏览器自动化与 Ubuntu / 真实链路验证仍未开始
+- 下一阶段测试优先级应聚焦浏览器级 smoke / e2e、长生命周期流式推送方案、异常线程退出、`max_terminal_sessions` 淘汰、并发场景、前后端联调合同与 Ubuntu 实机验证
 
 ### 2026-04-20 第三阶段前端最小联调口径代码 / 构建评估
 

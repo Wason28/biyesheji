@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from ..decision.state import create_initial_state, set_last_node_result
+from ..decision.state import create_initial_state, ensure_agent_state, set_last_node_result
 from ..execution.server import build_server
+from ..perception.errors import UnsupportedProviderError
+from ..shared.types import RunPhase, RuntimeEventName
 from .contracts import (
     FrontendBootstrapPayload,
     FrontendConfigPayload,
@@ -28,10 +31,17 @@ from .presenters import (
     build_frontend_runtime_api,
     build_frontend_tools_payload,
 )
-from .run_registry import RunRegistry
+from .run_registry import RunRegistry, as_state_payload
 
 if TYPE_CHECKING:
     from ..app import Phase1Runtime
+
+
+class RuntimeConfigError(ValueError):
+    def __init__(self, *, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 @dataclass(slots=True)
@@ -52,7 +62,7 @@ class FrontendRuntimeFacade:
         return build_frontend_tools_payload(self.runtime)
 
     def update_config(self, payload: dict[str, object]) -> FrontendConfigPayload:
-        runtime_config = self.runtime.config
+        runtime_config = deepcopy(self.runtime.config)
         decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
         perception = payload.get("perception") if isinstance(payload.get("perception"), dict) else {}
         execution = payload.get("execution") if isinstance(payload.get("execution"), dict) else {}
@@ -88,18 +98,29 @@ class FrontendRuntimeFacade:
             runtime_config.execution.stop_mode = str(execution["stop_mode"])
 
         if "port" in frontend:
-            runtime_config.frontend.port = int(frontend["port"])
+            runtime_config.frontend.port = self._coerce_int(frontend["port"], field_name="port")
         if "max_iterations" in frontend:
-            max_iterations = int(frontend["max_iterations"])
+            max_iterations = self._coerce_positive_int(frontend["max_iterations"], field_name="max_iterations")
             runtime_config.frontend.max_iterations = max_iterations
             runtime_config.decision.max_iterations = max_iterations
         if "speed_scale" in frontend:
-            runtime_config.frontend.speed_scale = float(frontend["speed_scale"])
+            runtime_config.frontend.speed_scale = self._coerce_positive_float(frontend["speed_scale"], field_name="speed_scale")
 
-        self.runtime.perception.reload_runtime(runtime_config)
-        self.runtime.execution = build_server(runtime_config)
-        self.runtime.mcp_client = self.runtime.mcp_client.__class__(self.runtime.perception, self.runtime.execution)
-        self.runtime.decision = type(self.runtime.decision).from_config(runtime_config, mcp_client=self.runtime.mcp_client)
+        try:
+            new_perception = self.runtime.perception.__class__(runtime_config)
+            new_execution = build_server(runtime_config)
+            new_mcp_client = self.runtime.mcp_client.__class__(new_perception, new_execution)
+            new_decision = type(self.runtime.decision).from_config(runtime_config, mcp_client=new_mcp_client)
+        except UnsupportedProviderError as exc:
+            raise RuntimeConfigError(code="InvalidPerceptionProvider", message=exc.message) from exc
+        except ValueError as exc:
+            raise RuntimeConfigError(code="InvalidDecisionProvider", message=str(exc)) from exc
+
+        self.runtime.config = runtime_config
+        self.runtime.perception = new_perception
+        self.runtime.execution = new_execution
+        self.runtime.mcp_client = new_mcp_client
+        self.runtime.decision = new_decision
         return build_frontend_config_payload(self.runtime)
 
     def get_runtime_api(self) -> FrontendRuntimeAPI:
@@ -117,7 +138,14 @@ class FrontendRuntimeFacade:
         )
         initial_snapshot = build_frontend_run_snapshot(initial_state, run_id=resolved_run_id)
         self.run_registry.create_session(run_id=resolved_run_id, instruction=instruction)
-        self.run_registry.publish(run_id=resolved_run_id, run=initial_snapshot, terminal=False)
+        self.run_registry.publish(
+            run_id=resolved_run_id,
+            event="snapshot",
+            phase="trigger",
+            run=initial_snapshot,
+            timestamp=str(initial_state["last_node_result"]["timestamp"]),
+            terminal=False,
+        )
         worker = Thread(
             target=self._run_worker,
             kwargs={
@@ -139,26 +167,55 @@ class FrontendRuntimeFacade:
 
     def get_run(self, *, run_id: str) -> FrontendRunStatePayload:
         latest_event = self.run_registry.latest(run_id)
-        return {
-            "run": latest_event.run,
-            "version": latest_event.version,
-            "terminal": latest_event.terminal,
-            "event": "snapshot",
-        }
+        return as_state_payload(latest_event)
 
     def iter_run_events(self, *, run_id: str, after_version: int = 0) -> list[FrontendRunStatePayload]:
         return [
-            {
-                "run": event.run,
-                "version": event.version,
-                "terminal": event.terminal,
-                "event": "snapshot",
-            }
+            as_state_payload(event)
             for event in self.run_registry.iter_events(run_id, after_version=after_version)
         ]
 
     def build_error(self, *, code: str, message: str) -> FrontendErrorPayload:
         return build_frontend_run_error(code=code, message=message)
+
+    def _publish_state_event(
+        self,
+        *,
+        run_id: str,
+        state: dict[str, Any],
+        phase: RunPhase,
+        event: RuntimeEventName,
+        timestamp: str,
+        terminal: bool,
+    ) -> None:
+        snapshot = build_frontend_run_snapshot(state, run_id=run_id)
+        self.run_registry.publish(
+            run_id=run_id,
+            event=event,
+            phase=phase,
+            run=snapshot,
+            timestamp=timestamp,
+            terminal=terminal,
+        )
+
+    def _build_phase_started_state(
+        self,
+        raw_state: dict[str, Any],
+        *,
+        phase: RunPhase,
+        timestamp: str,
+    ) -> dict[str, Any]:
+        state = ensure_agent_state(raw_state, max_iterations=self.runtime.decision.deps.max_iterations)
+        phase_state = dict(state)
+        phase_state["current_phase"] = phase
+        phase_state["last_node_result"] = {
+            "node": phase,
+            "status_code": 102,
+            "message": f"{phase} 开始执行",
+            "metadata": {"event": "phase_started"},
+            "timestamp": timestamp,
+        }
+        return phase_state
 
     def _run_worker(
         self,
@@ -168,10 +225,70 @@ class FrontendRuntimeFacade:
         initial_state: dict[str, object],
     ) -> None:
         try:
-            final_state = self.runtime.decision.invoke(instruction, state=initial_state)
+            final_state: dict[str, Any] | None = None
+            for item in self.runtime.decision.graph.stream(initial_state, stream_mode="debug"):
+                if not isinstance(item, dict):
+                    continue
+                event_type = str(item.get("type", ""))
+                timestamp = str(item.get("timestamp", ""))
+                payload = item.get("payload", {})
+                if not isinstance(payload, dict):
+                    continue
+                phase = payload.get("name")
+                if not isinstance(phase, str):
+                    continue
+                if event_type == "task":
+                    input_state = payload.get("input", {})
+                    if isinstance(input_state, dict):
+                        self._publish_state_event(
+                            run_id=run_id,
+                            state=self._build_phase_started_state(input_state, phase=phase, timestamp=timestamp),
+                            phase=phase,
+                            event="phase_started",
+                            timestamp=timestamp,
+                            terminal=False,
+                        )
+                    continue
+                if event_type != "task_result":
+                    continue
+
+                result_state = payload.get("result", {})
+                if not isinstance(result_state, dict):
+                    continue
+                final_state = result_state
+                event_name: RuntimeEventName = "phase_completed"
+                terminal = False
+                if phase == "verification" and str(result_state.get("action_result", "")) == "failed":
+                    event_name = "phase_failed"
+                elif phase == "hri" and bool(dict(result_state.get("human_intervention", {})).get("required", False)):
+                    event_name = "human_intervention_required"
+                elif phase == "final_status":
+                    event_name = "run_completed"
+                    terminal = True
+                self._publish_state_event(
+                    run_id=run_id,
+                    state=result_state,
+                    phase=phase,
+                    event=event_name,
+                    timestamp=timestamp,
+                    terminal=terminal,
+                )
+
+            if final_state is not None and str(final_state.get("current_phase", "")) != "final_status":
+                final_state = dict(final_state)
+                final_state["termination_reason"] = final_state.get("termination_reason") or "stream_completed_without_terminal_phase"
+                self._publish_state_event(
+                    run_id=run_id,
+                    state=final_state,
+                    phase=str(final_state.get("current_phase", "trigger")),
+                    event="run_completed",
+                    timestamp=str(final_state.get("last_node_result", {}).get("timestamp", "")),
+                    terminal=True,
+                )
         except Exception as exc:
             failed_state = dict(initial_state)
             failed_state["action_result"] = "failed"
+            failed_state["termination_reason"] = "runtime_unavailable"
             failed_state["last_execution"] = {
                 "status": "failed",
                 "action_name": "",
@@ -180,15 +297,54 @@ class FrontendRuntimeFacade:
             }
             failed_state = set_last_node_result(
                 failed_state,
-                node="runtime",
+                node="final_status",
                 status_code=500,
                 message="运行服务暂时不可用",
                 metadata={"error_type": exc.__class__.__name__},
             )
-            final_snapshot = build_frontend_run_snapshot(failed_state, run_id=run_id)
-        else:
-            final_snapshot = build_frontend_run_snapshot(final_state, run_id=run_id)
-        self.run_registry.publish(run_id=run_id, run=final_snapshot, terminal=True)
+            failed_state["final_report"] = {
+                "goal": instruction,
+                "status": "failed",
+                "completed": False,
+                "termination_reason": "runtime_unavailable",
+                "remaining_tasks": list(failed_state.get("task_queue", [])),
+                "iteration_count": int(failed_state.get("iteration_count", 0)),
+                "last_execution": dict(failed_state.get("last_execution", {})),
+                "memory_summary": dict(failed_state.get("memory_summary", {})),
+                "observed_phases": ["trigger", "final_status"],
+            }
+            self._publish_state_event(
+                run_id=run_id,
+                state=failed_state,
+                phase="final_status",
+                event="phase_failed",
+                timestamp=str(failed_state["last_node_result"]["timestamp"]),
+                terminal=True,
+            )
+
+    @staticmethod
+    def _coerce_int(value: object, *, field_name: str) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeConfigError(code=f"Invalid{field_name.title()}", message=f"{field_name} 必须是整数") from exc
+
+    @classmethod
+    def _coerce_positive_int(cls, value: object, *, field_name: str) -> int:
+        parsed = cls._coerce_int(value, field_name=field_name)
+        if parsed <= 0:
+            raise RuntimeConfigError(code=f"Invalid{field_name.title()}", message=f"{field_name} 必须大于 0")
+        return parsed
+
+    @staticmethod
+    def _coerce_positive_float(value: object, *, field_name: str) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeConfigError(code=f"Invalid{field_name.title()}", message=f"{field_name} 必须是数字") from exc
+        if parsed <= 0:
+            raise RuntimeConfigError(code=f"Invalid{field_name.title()}", message=f"{field_name} 必须大于 0")
+        return parsed
 
 
 def build_frontend_facade(runtime: Phase1Runtime) -> FrontendRuntimeFacade:

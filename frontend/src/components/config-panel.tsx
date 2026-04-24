@@ -234,7 +234,11 @@ function renderFrontendSection(
   );
 }
 
-export function ConfigPanel() {
+interface ConfigPanelProps {
+  embedded?: boolean;
+}
+
+export function ConfigPanel({ embedded = false }: ConfigPanelProps) {
   const bootstrap = useWorkbenchStore((state) => state.bootstrap);
   const config = useWorkbenchStore((state) => state.config);
   const configDraft = useWorkbenchStore((state) => state.configDraft);
@@ -281,6 +285,8 @@ export function ConfigPanel() {
           </button>
         </div>
       }
+      compact={embedded}
+      className={embedded ? "settings-section" : undefined}
     >
       <div className="stack">
         <div className="key-value-grid">

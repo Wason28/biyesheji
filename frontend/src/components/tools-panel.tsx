@@ -1,7 +1,11 @@
 import { PanelShell } from "./panel-shell";
 import { useWorkbenchStore } from "../store/workbench";
 
-export function ToolsPanel() {
+interface ToolsPanelProps {
+  embedded?: boolean;
+}
+
+export function ToolsPanel({ embedded = false }: ToolsPanelProps) {
   const tools = useWorkbenchStore((state) => state.tools);
   const toolsStatus = useWorkbenchStore((state) => state.toolsStatus);
   const toolsNotice = useWorkbenchStore((state) => state.toolsNotice);
@@ -25,6 +29,8 @@ export function ToolsPanel() {
           </button>
         </div>
       }
+      compact={embedded}
+      className={embedded ? "settings-section" : undefined}
     >
       <div className="stack">
         <div className="key-value-grid">

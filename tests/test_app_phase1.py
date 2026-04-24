@@ -29,6 +29,9 @@ def test_unified_startup_builds_mock_runtime_and_runs_single_task(app_config) ->
     final_state = runtime.decision.invoke("抓取桌面方块")
 
     assert final_state["action_result"] == "success"
+    assert final_state["current_phase"] == "final_status"
+    assert final_state["termination_reason"] == "all_tasks_completed"
+    assert final_state["final_report"]["completed"] is True
     assert final_state["selected_capability"] == "pick_and_place"
     assert final_state["selected_action"] == "run_smolvla"
     tool_names = [call["tool_name"] for call in final_state["debug_metrics"]["tool_calls"]]
@@ -48,9 +51,11 @@ def test_unified_startup_runs_multiple_tasks_through_single_runtime(app_config) 
     final_state = runtime.decision.invoke("抓取桌面方块，然后回到安全位置")
 
     assert final_state["action_result"] == "success"
+    assert final_state["current_phase"] == "final_status"
     assert final_state["iteration_count"] == 2
     assert final_state["task_queue"] == []
     assert final_state["current_task"] == ""
+    assert final_state["termination_reason"] == "all_tasks_completed"
     assert final_state["selected_capability"] == "return_home"
     assert final_state["selected_action"] == "move_home"
     tool_names = [call["tool_name"] for call in final_state["debug_metrics"]["tool_calls"]]
@@ -249,10 +254,14 @@ def test_unified_runtime_fails_closed_loop_when_perception_fails(app_config) -> 
     final_state = runtime.decision.invoke("抓取桌面方块")
 
     assert final_state["action_result"] == "failed"
-    assert final_state["last_node_result"]["node"] in {"scene_analyzer", "verifier"}
+    assert final_state["current_phase"] == "final_status"
+    assert final_state["termination_reason"] == "compensation_exhausted"
+    assert final_state["last_node_result"]["node"] == "final_status"
+    assert final_state["error_diagnosis"]["reason"] == "current_image 不能为空。"
     assert final_state["last_node_result"]["message"]
+    assert "active_perception" in final_state["final_report"]["observed_phases"]
     tool_names = [call["tool_name"] for call in final_state["debug_metrics"]["tool_calls"]]
-    assert tool_names.count("get_image") == 1
+    assert tool_names.count("get_image") >= 1
 
 
 class _FailingExecutionServer(MockMCPServer):
@@ -292,15 +301,23 @@ def test_unified_runtime_propagates_execution_failure_through_closed_loop(app_co
     final_state = runtime.decision.invoke("抓取桌面方块")
 
     assert final_state["action_result"] == "failed"
+    assert final_state["current_phase"] == "final_status"
+    assert final_state["termination_reason"] == "compensation_exhausted"
     assert final_state["last_execution"] == {
-        "status": "failed",
-        "action_name": "run_smolvla",
-        "message": "执行服务暂时不可用",
-        "logs": ["executor unavailable"],
+        "status": "success",
+        "action_name": "move_home",
+        "message": "机器人已回到安全 home 位姿。",
+        "logs": [
+            "move_home: 开始执行 mock 工具。",
+            "已同步机器人状态。",
+            "已通过预定义安全路径回零。",
+        ],
     }
-    assert final_state["last_node_result"]["node"] == "verifier"
-    assert final_state["last_node_result"]["status_code"] == 500
-    assert final_state["last_node_result"]["message"] == "执行失败，闭环终止"
+    assert final_state["error_diagnosis"]["reason"] == "执行服务暂时不可用"
+    assert final_state["last_node_result"]["node"] == "final_status"
+    assert final_state["last_node_result"]["status_code"] == 409
+    assert final_state["last_node_result"]["message"] == "输出执行报告"
+    assert final_state["final_report"]["completed"] is False
     assert any(
         call["tool_name"] == "run_smolvla" and call["ok"] is False and call["metadata"]["error_code"] == "ExecutionUnavailable"
         for call in final_state["debug_metrics"]["tool_calls"]
@@ -315,17 +332,20 @@ def test_frontend_run_snapshot_normalizes_completed_state_for_ui(app_config) -> 
 
     assert snapshot["run_id"] == "run-001"
     assert snapshot["status"] == "completed"
-    assert snapshot["current_node"] == "verifier"
+    assert snapshot["current_phase"] == "final_status"
+    assert snapshot["current_node"] == "final_status"
     assert snapshot["current_task"] == ""
     assert snapshot["selected_capability"] == "pick_and_place"
     assert snapshot["selected_action"] == "run_smolvla"
     assert snapshot["action_result"] == "success"
     assert snapshot["iteration_count"] == 1
     assert snapshot["max_iterations"] == runtime.decision.deps.max_iterations
+    assert snapshot["termination_reason"] == "all_tasks_completed"
+    assert snapshot["final_report"]["completed"] is True
     assert snapshot["scene_description"]
     assert isinstance(snapshot["scene_observations"], dict)
     assert snapshot["robot_state"]["joint_positions"]
-    assert snapshot["last_node_result"]["node"] == "verifier"
+    assert snapshot["last_node_result"]["node"] == "final_status"
     assert snapshot["last_execution"]["action_name"] == "run_smolvla"
     assert snapshot["logs"]
     assert snapshot["error"] == ""
@@ -348,8 +368,11 @@ def test_frontend_run_snapshot_surfaces_failure_message(app_config) -> None:
     snapshot: FrontendRunSnapshot = build_frontend_run_snapshot(final_state, run_id="run-failed")
 
     assert snapshot["status"] == "failed"
-    assert snapshot["current_node"] == "verifier"
-    assert snapshot["error"] == "执行失败，闭环终止"
+    assert snapshot["current_phase"] == "final_status"
+    assert snapshot["current_node"] == "final_status"
+    assert snapshot["termination_reason"] == "compensation_exhausted"
+    assert snapshot["final_report"]["completed"] is False
+    assert snapshot["error"] == "执行服务暂时不可用"
 
 
 def test_frontend_bootstrap_and_config_payloads_expose_phase2_placeholders(app_config) -> None:
@@ -383,8 +406,11 @@ def test_frontend_bootstrap_and_config_payloads_expose_phase2_placeholders(app_c
     assert any(capability["capability_name"] == "pick_and_place" for capability in bootstrap["execution_capabilities"])
     assert bootstrap["execution_safety"]["adapter_name"] == "mock_lerobot"
     assert bootstrap["execution_safety"]["manual_reset_required"] is True
+    assert "current_phase" in bootstrap["status_fields"]
     assert "current_node" in bootstrap["status_fields"]
     assert "selected_action" in bootstrap["status_fields"]
+    assert "termination_reason" in bootstrap["status_fields"]
+    assert "final_report" in bootstrap["status_fields"]
     assert runtime_api["bootstrap"] == bootstrap
     assert runtime_api["config"] == config_payload
 
@@ -397,6 +423,7 @@ def test_frontend_run_api_returns_snapshot(app_config) -> None:
 
     assert snapshot["run_id"] == "run-api"
     assert snapshot["status"] == "completed"
+    assert snapshot["current_phase"] == "final_status"
     assert snapshot["selected_capability"] == "pick_and_place"
     assert snapshot["selected_action"] == "run_smolvla"
 
@@ -424,6 +451,7 @@ def test_frontend_runtime_facade_wraps_placeholder_endpoints(app_config) -> None
     assert runtime_api["bootstrap"]["config"] == runtime_api["config"]
     assert run_api["run"]["run_id"] == "facade-run"
     assert run_api["run"]["status"] == "completed"
+    assert run_api["run"]["current_phase"] == "final_status"
     assert error_payload == {
         "error": {
             "code": "FacadeUnavailable",

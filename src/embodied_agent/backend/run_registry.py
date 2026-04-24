@@ -7,17 +7,24 @@ from threading import Condition, RLock, Thread
 from time import monotonic
 from typing import TYPE_CHECKING
 
-from .contracts import FrontendRunSnapshot
+from .contracts import FrontendRunSnapshot, FrontendRunStatePayload, RunPhase, RuntimeEventName
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
+class RunConflictError(ValueError):
+    pass
+
+
 @dataclass(slots=True)
 class RunEvent:
     version: int
+    event: RuntimeEventName
+    phase: RunPhase
     run: FrontendRunSnapshot
     terminal: bool
+    timestamp: str
 
 
 @dataclass(slots=True)
@@ -47,7 +54,7 @@ class RunRegistry:
         with self._lock:
             self._sweep_locked()
             if run_id in self._sessions:
-                raise ValueError(f"run '{run_id}' already exists")
+                raise RunConflictError(f"run '{run_id}' already exists")
             session = RunSession(run_id=run_id, instruction=instruction)
             self._sessions[run_id] = session
             return session
@@ -65,18 +72,34 @@ class RunRegistry:
         with session.condition:
             session.worker = worker
 
-    def publish(self, run_id: str, *, run: FrontendRunSnapshot, terminal: bool) -> RunEvent:
+    def publish(
+        self,
+        run_id: str,
+        *,
+        event: RuntimeEventName,
+        phase: RunPhase,
+        run: FrontendRunSnapshot,
+        timestamp: str,
+        terminal: bool,
+    ) -> RunEvent:
         session = self.get_session(run_id)
         with session.condition:
-            event = RunEvent(version=len(session.events) + 1, run=dict(run), terminal=terminal)
-            session.events.append(event)
+            next_event = RunEvent(
+                version=len(session.events) + 1,
+                event=event,
+                phase=phase,
+                run=dict(run),
+                terminal=terminal,
+                timestamp=timestamp,
+            )
+            session.events.append(next_event)
             session.terminal = terminal
             if terminal:
                 session.terminal_at = monotonic()
             session.condition.notify_all()
         with self._lock:
             self._sweep_locked()
-        return event
+        return next_event
 
     def latest(self, run_id: str) -> RunEvent:
         session = self.get_session(run_id)
@@ -132,3 +155,14 @@ class RunRegistry:
                 self._sessions.pop(run_id, None)
                 removed_run_ids.append(run_id)
         return removed_run_ids
+
+
+def as_state_payload(event: RunEvent) -> FrontendRunStatePayload:
+    return {
+        "run": event.run,
+        "version": event.version,
+        "terminal": event.terminal,
+        "event": event.event,
+        "phase": event.phase,
+        "timestamp": event.timestamp,
+    }

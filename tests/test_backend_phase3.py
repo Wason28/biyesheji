@@ -1,5 +1,6 @@
 import io
 import json
+from time import monotonic, sleep
 
 from embodied_agent.app import build_runtime
 from embodied_agent.backend.http import build_http_app_from_runtime
@@ -27,6 +28,34 @@ def _request(app, method: str, path: str, body: dict[str, object] | None = None,
         environ[key] = value
     body_bytes = b"".join(app(environ, start_response))
     return status_holder["status"], dict(status_holder["headers"]), body_bytes
+
+
+def _parse_sse(body: bytes) -> list[dict[str, object]]:
+    raw = body.decode("utf-8")
+    events: list[dict[str, object]] = []
+    for chunk in [item for item in raw.split("\n\n") if item.strip()]:
+        entry: dict[str, object] = {}
+        for line in chunk.splitlines():
+            if line.startswith("id: "):
+                entry["id"] = int(line[4:])
+            elif line.startswith("event: "):
+                entry["event_name"] = line[7:]
+            elif line.startswith("data: "):
+                entry["data"] = json.loads(line[6:])
+        events.append(entry)
+    return events
+
+
+def _wait_for_terminal_http_events(app, run_id: str, timeout_s: float = 5.0) -> list[dict[str, object]]:
+    start = monotonic()
+    while monotonic() - start < timeout_s:
+        status, _, body = _request(app, "GET", f"/api/v1/runtime/runs/{run_id}/events")
+        assert status.startswith("200")
+        events = _parse_sse(body)
+        if any(bool(dict(event["data"]).get("terminal", False)) for event in events if isinstance(event.get("data"), dict)):
+            return events
+        sleep(0.05)
+    raise AssertionError(f"run {run_id} did not reach terminal state in time")
 
 
 def test_backend_http_bootstrap_and_tools_expose_execution_contracts(app_config) -> None:
@@ -67,7 +96,7 @@ def test_backend_facade_start_run_exposes_snapshot_and_events_urls(app_config) -
     assert accepted["events_url"] == "/api/v1/runtime/runs/run-backend/events"
     assert accepted["run"]["status"] == "running"
     assert snapshot["version"] >= 1
-    assert snapshot["event"] == "snapshot"
+    assert snapshot["event"] in {"snapshot", "phase_started", "phase_completed", "run_completed"}
 
 
 def test_backend_http_run_route_returns_direct_snapshot(app_config) -> None:
@@ -86,6 +115,7 @@ def test_backend_http_run_route_returns_direct_snapshot(app_config) -> None:
     assert headers["Content-Type"].startswith("application/json")
     assert payload["run"]["run_id"] == "run-direct"
     assert payload["run"]["status"] in {"completed", "failed"}
+    assert payload["run"]["current_phase"] == "final_status"
 
 
 def test_backend_http_invalid_instruction_returns_error_payload(app_config) -> None:
@@ -157,6 +187,25 @@ def test_backend_bootstrap_config_exposes_assistant_metadata(app_config) -> None
     assert payload["config"]["decision"]["assistant"]["title"] == "模型部署助手"
     assert payload["config"]["perception"]["assistant"]["title"] == "系统载入助手"
     assert payload["config"]["perception"]["assistant"]["detected_models"]
+    assert payload["config"]["perception"]["assistant"]["status"] == "attention"
+    assert "mock provider" in payload["config"]["perception"]["assistant"]["message"]
+
+
+
+def test_backend_bootstrap_config_marks_perception_provider_configured_when_remote_ready(app_config) -> None:
+    app_config.perception.vlm_provider = "openai_gpt4o"
+    app_config.perception.vlm_api_key = "perception-secret"
+    runtime = build_runtime(app_config)
+    app = build_http_app_from_runtime(runtime)
+
+    status, _, body = _request(app, "GET", "/api/v1/runtime/bootstrap")
+    payload = json.loads(body.decode("utf-8"))
+    perception_assistant = payload["config"]["perception"]["assistant"]
+
+    assert status.startswith("200")
+    assert perception_assistant["status"] == "configured"
+    assert perception_assistant["detected_models"][0]["configured"] is True
+    assert perception_assistant["detected_models"][0]["provider"] == "openai_gpt4o"
 
 
 def test_backend_http_events_support_last_event_id_and_after_version(app_config) -> None:
@@ -164,6 +213,8 @@ def test_backend_http_events_support_last_event_id_and_after_version(app_config)
     app = build_http_app_from_runtime(runtime)
 
     _request(app, "POST", "/api/v1/runtime/runs", {"instruction": "抓取桌面方块", "run_id": "run-offset"})
+    events = _wait_for_terminal_http_events(app, "run-offset")
+    assert events
 
     status_with_header, _, body_with_header = _request(
         app,
@@ -178,7 +229,34 @@ def test_backend_http_events_support_last_event_id_and_after_version(app_config)
         query="after_version=1",
     )
 
+    parsed_header = _parse_sse(body_with_header)
+    parsed_query = _parse_sse(body_with_query)
+
     assert status_with_header.startswith("200")
     assert status_with_query.startswith("200")
-    assert isinstance(body_with_header, bytes)
-    assert isinstance(body_with_query, bytes)
+    assert parsed_header
+    assert parsed_query
+    assert all(int(event["id"]) > 1 for event in parsed_header)
+    assert all(int(event["id"]) > 1 for event in parsed_query)
+    assert parsed_header[-1]["event_name"] == dict(parsed_header[-1]["data"])["event"]
+    assert parsed_query[-1]["event_name"] == dict(parsed_query[-1]["data"])["event"]
+
+
+def test_backend_facade_update_config_is_atomic_when_provider_is_invalid(app_config) -> None:
+    runtime = build_runtime(app_config)
+    facade = build_frontend_facade(runtime)
+    original_provider = runtime.config.decision.llm_provider
+    original_model = runtime.config.decision.llm_model
+
+    try:
+        facade.update_config({"decision": {"provider": "unsupported-provider", "model": "broken-model"}})
+    except ValueError as exc:
+        assert "unsupported" in str(exc)
+    else:
+        raise AssertionError("expected invalid provider update to fail")
+
+    payload = facade.get_config()
+    assert runtime.config.decision.llm_provider == original_provider
+    assert runtime.config.decision.llm_model == original_model
+    assert payload["decision"]["provider"] == original_provider
+    assert payload["decision"]["model"] == original_model

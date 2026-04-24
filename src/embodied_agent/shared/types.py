@@ -1,4 +1,4 @@
-"""Shared data structures aligned with the project interface baseline."""
+"""Shared data structures aligned with the runtime and frontend contracts."""
 
 from __future__ import annotations
 
@@ -7,6 +7,32 @@ from typing import Any, Literal, TypedDict
 
 ActionStatus = Literal["success", "in_progress", "failed"]
 RunStatus = Literal["idle", "running", "completed", "failed"]
+RunPhase = Literal[
+    "trigger",
+    "nlu",
+    "sensory",
+    "assessment",
+    "active_perception",
+    "task_planning",
+    "pre_feedback",
+    "motion_control",
+    "verification",
+    "error_diagnosis",
+    "hri",
+    "compensation",
+    "success_notice",
+    "goal_check",
+    "state_compression",
+    "final_status",
+]
+RuntimeEventName = Literal[
+    "snapshot",
+    "phase_started",
+    "phase_completed",
+    "phase_failed",
+    "human_intervention_required",
+    "run_completed",
+]
 
 
 class CartesianPosition(TypedDict):
@@ -77,17 +103,28 @@ class FrontendConfigPayload(TypedDict):
 class FrontendRunSnapshot(TypedDict, total=False):
     run_id: str
     status: RunStatus
+    current_phase: RunPhase
     current_node: str
     current_task: str
     selected_capability: str
     selected_action: str
     scene_description: str
     scene_observations: dict[str, Any]
+    perception_confidence: float
     action_result: ActionStatus
     iteration_count: int
     max_iterations: int
     current_image: str
     robot_state: RobotState
+    plan: list[dict[str, Any]]
+    pre_execution_feedback: dict[str, Any]
+    execution_feedback: dict[str, Any]
+    verification_result: dict[str, Any]
+    error_diagnosis: dict[str, Any]
+    retry_context: dict[str, Any]
+    memory_summary: dict[str, Any]
+    termination_reason: str
+    final_report: dict[str, Any]
     last_node_result: dict[str, Any]
     last_execution: ExecutionResult
     logs: list[dict[str, Any]]
@@ -109,6 +146,23 @@ class FrontendRuntimeAPI(TypedDict):
 
 
 class FrontendRunAPI(TypedDict):
+    run: FrontendRunSnapshot
+
+
+class FrontendRunStatePayload(TypedDict):
+    run: FrontendRunSnapshot
+    version: int
+    terminal: bool
+    event: RuntimeEventName
+    phase: RunPhase
+    timestamp: str
+
+
+class FrontendRunAcceptedPayload(TypedDict):
+    run_id: str
+    status: RunStatus
+    snapshot_url: str
+    events_url: str
     run: FrontendRunSnapshot
 
 

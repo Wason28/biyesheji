@@ -74,13 +74,25 @@ class MinimalMCPClient:
 
         started_at = perf_counter()
         try:
-            content = handler(arguments)
+            result = handler(arguments)
             elapsed_ms = round((perf_counter() - started_at) * 1000, 3)
+            if isinstance(result, dict) and any(key in result for key in {"ok", "status_code", "tool_name", "content", "metadata"}):
+                metadata = dict(result.get("metadata", {}))
+                metadata.setdefault("arguments", arguments)
+                metadata.setdefault("elapsed_ms", elapsed_ms)
+                return {
+                    "ok": bool(result.get("ok", True)),
+                    "status_code": int(result.get("status_code", 200)),
+                    "tool_name": str(result.get("tool_name", tool_name)),
+                    "content": result.get("content"),
+                    "message": str(result.get("message", "ok")),
+                    "metadata": metadata,
+                }
             return {
                 "ok": True,
                 "status_code": 200,
                 "tool_name": tool_name,
-                "content": content,
+                "content": result,
                 "message": "ok",
                 "metadata": {
                     "arguments": arguments,
@@ -160,13 +172,35 @@ class MinimalMCPClient:
         }
 
     @staticmethod
-    def _mock_describe_scene(arguments: dict[str, Any]) -> str:
+    def _mock_describe_scene(arguments: dict[str, Any]) -> MCPResponse:
         prompt = str(arguments.get("prompt", "")).strip()
         suffix = f" 提示词: {prompt}" if prompt else ""
-        return (
-            "桌面场景已检测到一个机械臂、一个待操作目标物和可达工作区域。"
-            f"{suffix}"
-        )
+        return {
+            "ok": True,
+            "status_code": 200,
+            "tool_name": "describe_scene",
+            "content": (
+                "桌面场景已检测到一个机械臂、一个待操作目标物和可达工作区域。"
+                f"{suffix}"
+            ),
+            "message": "ok",
+            "metadata": {
+                "provider": "mock_minimal_perception",
+                "model": "mock_describe_scene",
+                "confidence": 0.91,
+                "structured_observations": {
+                    "robot_grasp_state": "open",
+                    "risk_flags": [],
+                    "objects": [
+                        {
+                            "name": "cube",
+                            "category": "target_object",
+                            "graspable": True,
+                        }
+                    ],
+                },
+            },
+        }
 
     @staticmethod
     def _mock_run_smolvla(arguments: dict[str, Any]) -> ExecutionResult:

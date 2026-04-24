@@ -20,11 +20,21 @@ import type {
   FrontendRunSnapshot,
   FrontendRunStatePayload,
   FrontendToolDescriptor,
+  RuntimeEventName,
 } from "../types/runtime";
 
 type AsyncStatus = "idle" | "loading" | "ready" | "error";
 type StreamStatus = "idle" | "connecting" | "live" | "closed" | "error";
 type ThemeMode = "dark" | "light";
+
+const runtimeEventNames: RuntimeEventName[] = [
+  "snapshot",
+  "phase_started",
+  "phase_completed",
+  "phase_failed",
+  "human_intervention_required",
+  "run_completed",
+];
 
 interface WorkbenchState {
   runtimeBaseUrl: string;
@@ -103,6 +113,10 @@ function upsertRunEvent(
 
 function cloneConfig(config: FrontendConfigPayload | null) {
   return config ? JSON.parse(JSON.stringify(config)) as FrontendConfigPayload : null;
+}
+
+function describeRuntimeEvent(payload: FrontendRunStatePayload) {
+  return `${payload.phase} / ${payload.event}`;
 }
 
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
@@ -275,7 +289,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       streamStatus: "connecting",
       latestError: "",
       latestErrorCode: "",
-      streamNotice: "正在创建 run 并订阅 snapshot 事件。",
+      streamNotice: "正在创建 run 并订阅阶段事件。",
       runAccepted: null,
       latestRunState: null,
       eventFeed: [],
@@ -291,18 +305,17 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         latestErrorCode: "",
         streamNotice: "run 已接受，正在连接事件流。",
       });
-      await get().syncRunSnapshot();
 
       const source = createRuntimeEventSource(accepted.events_url);
 
       source.onopen = () => {
         set({
           streamStatus: "live",
-          streamNotice: "已连接 snapshot 事件流。",
+          streamNotice: "已连接运行阶段事件流。",
         });
       };
 
-      source.addEventListener("snapshot", (event) => {
+      const handleRuntimeEvent = (event: Event) => {
         const payload = JSON.parse((event as MessageEvent<string>).data) as FrontendRunStatePayload;
         set((state) => ({
           snapshot: payload.run,
@@ -310,10 +323,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           eventFeed: upsertRunEvent(state.eventFeed, payload),
           streamStatus: payload.terminal ? "closed" : "live",
           streamNotice: payload.terminal
-            ? "收到终态 snapshot，事件订阅已收口。"
-            : `已收到版本 ${payload.version} 的 snapshot 事件。`,
+            ? "收到终态事件，事件订阅已收口。"
+            : `已收到 ${describeRuntimeEvent(payload)}（版本 ${payload.version}）。`,
           lastRunSummary: payload.terminal
-            ? `最近一次 run 终态：${payload.run.status}（版本 ${payload.version}）。`
+            ? `最近一次 run 终态：${payload.run.status}（${describeRuntimeEvent(payload)} / v${payload.version}）。`
             : state.lastRunSummary,
         }));
         if (payload.terminal) {
@@ -322,6 +335,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
             eventSource: null,
           });
         }
+      };
+
+      runtimeEventNames.forEach((eventName) => {
+        source.addEventListener(eventName, handleRuntimeEvent);
       });
 
       source.onerror = () => {
@@ -331,7 +348,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
             source.readyState === EventSource.CONNECTING ? "connecting" : "error",
           streamNotice:
             source.readyState === EventSource.CONNECTING
-              ? "后端 SSE 为回放式骨架，浏览器正在尝试续连。"
+              ? "后端 SSE 为回放式阶段事件流，浏览器正在尝试续连。"
               : "事件流暂时不可用。",
         });
       };
@@ -363,10 +380,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         latestRunState: payload,
         eventFeed: upsertRunEvent(state.eventFeed, payload),
         streamNotice: payload.terminal
-          ? "已通过 snapshot_url 同步到终态快照。"
-          : `已通过 snapshot_url 同步到版本 ${payload.version}。`,
+          ? "已通过 snapshot_url 同步到终态状态。"
+          : `已通过 snapshot_url 同步到 ${describeRuntimeEvent(payload)}。`,
         lastRunSummary: payload.terminal
-          ? `最近一次 run 终态：${payload.run.status}（版本 ${payload.version}）。`
+          ? `最近一次 run 终态：${payload.run.status}（${describeRuntimeEvent(payload)} / v${payload.version}）。`
           : state.lastRunSummary,
       }));
     } catch (error) {
