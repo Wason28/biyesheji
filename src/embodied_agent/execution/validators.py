@@ -36,6 +36,12 @@ def require_float(name: str, value: Any) -> float:
     return numeric
 
 
+def require_int(name: str, value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError(f"{name} 必须是整数。")
+    return value
+
+
 def normalize_quaternion(orientation: Any) -> Quaternion:
     if isinstance(orientation, dict):
         source = {key: require_float(f"orientation.{key}", orientation.get(key)) for key in ("x", "y", "z", "w")}
@@ -98,6 +104,26 @@ def validate_force(force: Any | None, config: ExecutionSafetyConfig) -> float:
             f"force={grasp_force:.2f} 超出安全夹取范围 [{config.min_force:.2f}, {config.max_force:.2f}]。"
         )
     return grasp_force
+
+
+def validate_servo_rotation(
+    servo_id: Any,
+    degrees: Any,
+    config: ExecutionSafetyConfig,
+) -> dict[str, float | int]:
+    parsed_id = require_int("id", servo_id)
+    joint_count = len(config.home_joint_positions)
+    if joint_count <= 0:
+        raise ValidationError("未配置任何可控舵机。")
+    if not 1 <= parsed_id <= joint_count:
+        raise ValidationError(f"id={parsed_id} 超出舵机范围 [1, {joint_count}]。")
+
+    parsed_degrees = require_float("degrees", degrees)
+    return {
+        "id": parsed_id,
+        "joint_index": parsed_id - 1,
+        "degrees": parsed_degrees,
+    }
 
 
 def validate_robot_state(robot_state: Any) -> RobotState:

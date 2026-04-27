@@ -34,7 +34,9 @@ class UnifiedMCPClient(MinimalMCPClient):
         self.register_tool("move_to", self._move_to)
         self.register_tool("move_home", self._move_home)
         self.register_tool("grasp", self._grasp)
+        self.register_tool("servo_rotate", self._servo_rotate)
         self.register_tool("release", self._release)
+        self.register_tool("clear_emergency_stop", self._clear_emergency_stop)
 
     def call_tool(
         self,
@@ -56,8 +58,12 @@ class UnifiedMCPClient(MinimalMCPClient):
             return self._execution_response(tool_name, self._execution_server.call_tool("move_home", arguments))
         if tool_name == "grasp":
             return self._execution_response(tool_name, self._execution_server.call_tool("grasp", arguments))
+        if tool_name == "servo_rotate":
+            return self._execution_response(tool_name, self._execution_server.call_tool("servo_rotate", arguments))
         if tool_name == "release":
             return self._execution_response(tool_name, self._execution_server.call_tool("release", arguments))
+        if tool_name == "clear_emergency_stop":
+            return self._execution_response(tool_name, self._execution_server.call_tool("clear_emergency_stop", arguments))
         return {
             "ok": False,
             "status_code": 404,
@@ -88,8 +94,14 @@ class UnifiedMCPClient(MinimalMCPClient):
     def _grasp(self, arguments: dict[str, Any]) -> Any:
         return self._execution_server.call_tool("grasp", arguments)
 
+    def _servo_rotate(self, arguments: dict[str, Any]) -> Any:
+        return self._execution_server.call_tool("servo_rotate", arguments)
+
     def _release(self, arguments: dict[str, Any]) -> Any:
         return self._execution_server.call_tool("release", arguments)
+
+    def _clear_emergency_stop(self, arguments: dict[str, Any]) -> Any:
+        return self._execution_server.call_tool("clear_emergency_stop", arguments)
 
     @staticmethod
     def _perception_response(tool_name: str, payload: dict[str, Any]) -> MCPResponse:

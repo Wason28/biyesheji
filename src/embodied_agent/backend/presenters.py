@@ -29,6 +29,8 @@ PERCEPTION_VLM_PROVIDERS = ["minimax_mcp_vision", "openai_gpt4o", "ollama_vision
 FRONTEND_STATUS_FIELDS = [
     "run_id",
     "status",
+    "user_instruction",
+    "assistant_response",
     "current_phase",
     "current_node",
     "current_task",
@@ -126,6 +128,8 @@ def build_frontend_config_payload(runtime: Phase1Runtime) -> FrontendConfigPaylo
     execution_model = execution_description["execution_model"]
     decision_provider = runtime.config.decision.llm_provider
     perception_provider = runtime.config.perception.vlm_provider
+    decision_base_url = runtime.config.decision.llm_base_url
+    decision_ready = bool(runtime.config.decision.llm_api_key or runtime.config.decision.llm_local_path or decision_base_url)
     return {
         "decision": {
             "provider": decision_provider,
@@ -134,13 +138,18 @@ def build_frontend_config_payload(runtime: Phase1Runtime) -> FrontendConfigPaylo
             "api_key": "",
             "api_key_configured": bool(runtime.config.decision.llm_api_key),
             "local_path": runtime.config.decision.llm_local_path,
+            "base_url": decision_base_url,
             "assistant": {
                 "title": "模型部署助手",
-                "status": "configured" if bool(runtime.config.decision.llm_api_key or runtime.config.decision.llm_local_path) else "attention",
+                "status": "configured" if decision_ready else "attention",
                 "message": (
-                    f"当前决策模型使用 {decision_provider}，可继续填写 API Key 或本地路径完成部署。"
-                    if not (runtime.config.decision.llm_api_key or runtime.config.decision.llm_local_path)
-                    else f"当前决策模型 {runtime.config.decision.llm_model} 已具备基础部署条件。"
+                    f"当前决策模型使用 {decision_provider}，可继续填写 API Key、本地路径或兼容网关地址完成部署。"
+                    if not decision_ready
+                    else (
+                        f"当前决策模型 {runtime.config.decision.llm_model} 已通过 {decision_provider} 接入：{decision_base_url}。"
+                        if decision_base_url
+                        else f"当前决策模型 {runtime.config.decision.llm_model} 已具备基础部署条件。"
+                    )
                 ),
             },
         },
@@ -151,14 +160,32 @@ def build_frontend_config_payload(runtime: Phase1Runtime) -> FrontendConfigPaylo
             "api_key": "",
             "api_key_configured": bool(runtime.config.perception.vlm_api_key),
             "local_path": runtime.config.perception.vlm_local_path,
+            "base_url": runtime.config.perception.vlm_base_url,
+            "camera_backend": runtime.config.perception.camera_backend,
+            "camera_device_id": runtime.config.perception.camera_device_id,
+            "camera_frame_id": runtime.config.perception.camera_frame_id,
+            "camera_width": runtime.config.perception.camera_width,
+            "camera_height": runtime.config.perception.camera_height,
+            "camera_fps": runtime.config.perception.camera_fps,
+            "camera_index": runtime.config.perception.camera_index,
+            "robot_state_backend": runtime.config.perception.robot_state_backend,
+            "robot_state_base_url": runtime.config.perception.robot_state_base_url,
+            "robot_state_config_path": runtime.config.perception.robot_state_config_path,
+            "robot_state_base_frame": runtime.config.perception.robot_state_base_frame,
             "assistant": _build_perception_assistant(runtime, execution_model),
         },
         "execution": {
             "display_name": execution_model["name"],
             "model_path": runtime.config.execution.vla_model_path,
+            "home_joint_positions": list(runtime.config.execution.home_joint_positions),
             "home_pose": dict(runtime.config.execution.home_pose),
             "adapter": execution_model["adapter"],
             "backend": execution_model["backend"],
+            "robot_base_url": runtime.config.execution.robot_base_url,
+            "robot_timeout_s": runtime.config.execution.robot_timeout_s,
+            "telemetry_poll_timeout_s": runtime.config.execution.telemetry_poll_timeout_s,
+            "safety_require_precheck": runtime.config.execution.safety_require_precheck,
+            "robot_pythonpath": runtime.config.execution.robot_pythonpath,
             "safety_policy": runtime.config.execution.safety_policy,
             "stop_mode": runtime.config.execution.stop_mode,
             "mutable": False,
@@ -167,7 +194,9 @@ def build_frontend_config_payload(runtime: Phase1Runtime) -> FrontendConfigPaylo
             "port": runtime.config.frontend.port,
             "max_iterations": runtime.decision.deps.max_iterations,
             "speed_scale": runtime.config.frontend.speed_scale,
+            "custom_models": list(runtime.config.frontend.custom_models),
         },
+        "vision_model": runtime.config.vision_model,
     }
 
 
@@ -180,6 +209,7 @@ def build_frontend_bootstrap(runtime: Phase1Runtime) -> FrontendBootstrapPayload
         "status_fields": list(FRONTEND_STATUS_FIELDS),
         "execution_capabilities": list(execution_description.get("capabilities", [])),
         "execution_safety": dict(execution_description.get("safety_boundary", {})),
+        "execution_runtime_profile": dict(execution_description.get("runtime_profile", {})),
     }
 
 
@@ -225,6 +255,8 @@ def build_frontend_run_snapshot(
     return {
         "run_id": run_id,
         "status": status,
+        "user_instruction": str(state.get("user_instruction", "")),
+        "assistant_response": str(state.get("assistant_response", "")),
         "current_phase": str(state.get("current_phase", "trigger")),
         "current_node": str(last_node_result.get("node", "")) if isinstance(last_node_result, Mapping) else "",
         "current_task": str(state.get("current_task", "")),

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal, TypedDict
+
+from typing_extensions import NotRequired
 
 from embodied_agent.shared.types import ExecutionResult, RobotState
 
 
-ToolName = Literal["move_to", "move_home", "grasp", "release", "run_smolvla"]
-CapabilityName = Literal["pick_and_place", "return_home", "release_object"]
+ToolName = Literal["move_to", "move_home", "grasp", "release", "servo_rotate", "run_smolvla", "clear_emergency_stop"]
+CapabilityName = Literal["pick_and_place", "return_home", "release_object", "servo_control"]
 SafetyStage = Literal[
     "input_validation",
     "preflight",
@@ -43,6 +45,11 @@ class GraspInput(TypedDict):
     force: float
 
 
+class ServoRotateInput(TypedDict):
+    id: int
+    degrees: float
+
+
 class SmolVLAInput(TypedDict):
     task_description: str
     current_image: str
@@ -53,6 +60,11 @@ class PlannedAction(TypedDict):
     tool: ToolName
     arguments: dict[str, Any]
     reason: str
+
+
+class ModelActionTrace(TypedDict):
+    index: int
+    targets: dict[str, float]
 
 
 class ActionContract(TypedDict):
@@ -95,9 +107,10 @@ class ExecutionToolResult(ExecutionResult, total=False):
     mock: bool
     validated_params: dict[str, Any]
     safety_checks: list[str]
-    telemetry: dict[str, float]
+    telemetry: dict[str, Any]
     robot_state: RobotState
     executed_plan: list[PlannedAction]
+    model_actions: list[ModelActionTrace]
     capability_name: CapabilityName
     capability_contract: CapabilityContract
     action_contract: ActionContract

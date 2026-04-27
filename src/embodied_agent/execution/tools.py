@@ -17,6 +17,7 @@ from .types import (
     CapabilityContract,
     CapabilityName,
     ExecutionToolResult,
+    ModelActionTrace,
     SafetyBoundary,
     SafetyStage,
     ToolName,
@@ -27,6 +28,7 @@ from .validators import (
     validate_force,
     validate_image_reference,
     validate_robot_state,
+    validate_servo_rotation,
     validate_task_description,
 )
 
@@ -80,6 +82,24 @@ _ACTION_CONTRACTS: dict[ToolName, ActionContract] = {
         "safety_stages": ["input_validation", "preflight", "adapter_dispatch", "telemetry_check"],
         "estop_on_failure": True,
     },
+    "servo_rotate": {
+        "action_name": "servo_rotate",
+        "tool_name": "servo_rotate",
+        "description": "按舵机 id 旋转指定角度。",
+        "input_schema": {
+            "type": "object",
+            "required": ["id", "degrees"],
+            "properties": {
+                "id": {"type": "integer", "minimum": 1},
+                "degrees": {"type": "number"},
+            },
+            "additionalProperties": False,
+        },
+        "output_schema": _ACTION_OUTPUT_SCHEMA,
+        "capability_names": ["servo_control"],
+        "safety_stages": ["input_validation", "preflight", "adapter_dispatch", "telemetry_check"],
+        "estop_on_failure": True,
+    },
     "release": {
         "action_name": "release",
         "tool_name": "release",
@@ -89,6 +109,16 @@ _ACTION_CONTRACTS: dict[ToolName, ActionContract] = {
         "capability_names": ["pick_and_place", "release_object"],
         "safety_stages": ["preflight", "adapter_dispatch", "telemetry_check"],
         "estop_on_failure": True,
+    },
+    "clear_emergency_stop": {
+        "action_name": "clear_emergency_stop",
+        "tool_name": "clear_emergency_stop",
+        "description": "清除急停锁存并重新同步机器人状态。",
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "output_schema": _ACTION_OUTPUT_SCHEMA,
+        "capability_names": [],
+        "safety_stages": ["adapter_dispatch", "telemetry_check"],
+        "estop_on_failure": False,
     },
     "run_smolvla": {
         "action_name": "run_smolvla",
@@ -138,11 +168,21 @@ _CAPABILITY_CONTRACTS: dict[CapabilityName, CapabilityContract] = {
         "required_tools": ["release"],
         "fixed_model": False,
     },
+    "servo_control": {
+        "capability_name": "servo_control",
+        "description": "按舵机 id 执行单关节安全旋转。",
+        "default_action": "servo_rotate",
+        "available_actions": ["servo_rotate"],
+        "execution_mode": "atomic",
+        "required_tools": ["servo_rotate"],
+        "fixed_model": False,
+    },
 }
 
 _DEFAULT_CAPABILITY_BY_ACTION: dict[ToolName, CapabilityName] = {
     "move_home": "return_home",
     "release": "release_object",
+    "servo_rotate": "servo_control",
     "run_smolvla": "pick_and_place",
 }
 
@@ -204,6 +244,7 @@ class ExecutionRuntime:
                 "name": self.adapter.adapter_name,
                 "config_path": self.config.robot_config,
                 "communication_retries": self.config.communication_retries,
+                "connection": self.adapter.connection_summary(),
             },
             "smolvla_backend": {
                 "name": self.smolvla.backend_name,
@@ -246,6 +287,7 @@ class ExecutionRuntime:
         validated_params: dict[str, Any] | None = None,
         safety_checks: list[str] | None = None,
         executed_plan: list[dict[str, Any]] | None = None,
+        model_actions: list[ModelActionTrace] | None = None,
         checked_stages: list[SafetyStage] | None = None,
     ) -> ExecutionToolResult:
         telemetry = self.adapter.read_telemetry()
@@ -261,10 +303,35 @@ class ExecutionRuntime:
             "telemetry": telemetry,
             "robot_state": robot_state,
             "executed_plan": executed_plan or [],
+            "model_actions": model_actions or [],
             "safety_boundary": self.describe_safety_boundary(checked_stages=checked_stages or []),
         }
         result.update(self._build_contract_payload(action_name))
         return result
+
+    def _read_telemetry(self) -> dict[str, Any]:
+        return dict(self.adapter.read_telemetry())
+
+    def _run_precheck(
+        self,
+        *,
+        action_name: ToolName,
+        robot_state: RobotState,
+        logs: list[str],
+        checked_stages: list[SafetyStage],
+    ) -> tuple[list[str], dict[str, Any]]:
+        checked_stages.append("preflight")
+        telemetry = self._read_telemetry()
+        safety_checks = self.safety.safety_precheck(
+            action_name=action_name,
+            robot_state=robot_state,
+            telemetry=telemetry,
+            estop_engaged=self.adapter.estopped,
+            stop_reason=self.adapter.last_stop_reason or None,
+        )
+        if not self.is_mock:
+            logs.append("真实链路安全前置检查通过。")
+        return safety_checks, telemetry
 
     def _failure(
         self,
@@ -316,17 +383,22 @@ class ExecutionRuntime:
             logs.append("已同步机器人状态。")
             pose = validate_cartesian_pose(x, y, z, orientation, self.config)
             checked_stages.append("input_validation")
-            safety_checks = self.safety.preflight_motion(pose, current_state)
-            checked_stages.append("preflight")
+            safety_checks, _ = self._run_precheck(
+                action_name="move_to",
+                robot_state=current_state,
+                logs=logs,
+                checked_stages=checked_stages,
+            )
+            safety_checks += self.safety.preflight_motion(pose, current_state)
             logs.append("参数校验与运动前安全检查通过。")
             robot_state = self.adapter.move_to_pose(pose)
             checked_stages.append("adapter_dispatch")
-            safety_checks += self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            safety_checks += self.safety.ensure_telemetry_safe(self._read_telemetry())
             checked_stages.append("telemetry_check")
-            logs.append("已通过 mock LeRobot 适配器下发 move_to。")
+            logs.append(f"已通过 {self.adapter.adapter_name} 下发 move_to。")
             return self._success(
                 "move_to",
-                "末端执行器已移动到目标 mock 位姿。",
+                "末端执行器已移动到目标位姿。",
                 logs,
                 robot_state=robot_state,
                 validated_params=pose,
@@ -340,11 +412,16 @@ class ExecutionRuntime:
         def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
             current_state = self.adapter.sync_state()
             logs.append("已同步机器人状态。")
-            safety_checks = self.safety.preflight_home(current_state)
-            checked_stages.append("preflight")
+            safety_checks, _ = self._run_precheck(
+                action_name="move_home",
+                robot_state=current_state,
+                logs=logs,
+                checked_stages=checked_stages,
+            )
+            safety_checks += self.safety.preflight_home(current_state)
             robot_state = self.adapter.move_home()
             checked_stages.append("adapter_dispatch")
-            safety_checks += self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            safety_checks += self.safety.ensure_telemetry_safe(self._read_telemetry())
             checked_stages.append("telemetry_check")
             logs.append("已通过预定义安全路径回零。")
             return self._success(
@@ -361,20 +438,25 @@ class ExecutionRuntime:
 
     def grasp(self, force: Any | None = None) -> ExecutionToolResult:
         def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
-            _ = self.adapter.sync_state()
+            current_state = self.adapter.sync_state()
             logs.append("已同步机器人状态。")
             grasp_force = validate_force(force, self.config)
             checked_stages.append("input_validation")
-            safety_checks = self.safety.preflight_grasp(grasp_force)
-            checked_stages.append("preflight")
+            safety_checks, _ = self._run_precheck(
+                action_name="grasp",
+                robot_state=current_state,
+                logs=logs,
+                checked_stages=checked_stages,
+            )
+            safety_checks += self.safety.preflight_grasp(grasp_force)
             robot_state = self.adapter.close_gripper(grasp_force)
             checked_stages.append("adapter_dispatch")
-            safety_checks += self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            safety_checks += self.safety.ensure_telemetry_safe(self._read_telemetry())
             checked_stages.append("telemetry_check")
-            logs.append("已通过 mock LeRobot 适配器闭合夹爪。")
+            logs.append(f"已通过 {self.adapter.adapter_name} 闭合夹爪。")
             return self._success(
                 "grasp",
-                "夹爪 mock 抓取完成。",
+                "夹爪抓取完成。",
                 logs,
                 robot_state=robot_state,
                 validated_params={"force": grasp_force},
@@ -384,20 +466,63 @@ class ExecutionRuntime:
 
         return self._run_guarded("grasp", operation)
 
+    def servo_rotate(self, id: Any, degrees: Any) -> ExecutionToolResult:
+        def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
+            current_state = self.adapter.sync_state()
+            logs.append("已同步机器人状态。")
+            validated = validate_servo_rotation(id, degrees, self.config)
+            checked_stages.append("input_validation")
+            safety_checks, _ = self._run_precheck(
+                action_name="servo_rotate",
+                robot_state=current_state,
+                logs=logs,
+                checked_stages=checked_stages,
+            )
+            safety_checks += self.safety.preflight_servo_rotation(
+                int(validated["id"]),
+                float(validated["degrees"]),
+                current_state,
+            )
+            robot_state = self.adapter.rotate_servo(int(validated["id"]), float(validated["degrees"]))
+            checked_stages.append("adapter_dispatch")
+            safety_checks += self.safety.ensure_telemetry_safe(self._read_telemetry())
+            checked_stages.append("telemetry_check")
+            logs.append(f"已通过 {self.adapter.adapter_name} 下发 servo_rotate。")
+            return self._success(
+                "servo_rotate",
+                f"舵机 {int(validated['id'])} 已旋转 {float(validated['degrees']):.2f}°。",
+                logs,
+                robot_state=robot_state,
+                validated_params={
+                    "id": int(validated["id"]),
+                    "joint_index": int(validated["joint_index"]),
+                    "degrees": float(validated["degrees"]),
+                },
+                safety_checks=safety_checks,
+                checked_stages=checked_stages,
+            )
+
+        return self._run_guarded("servo_rotate", operation)
+
     def release(self) -> ExecutionToolResult:
         def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
-            _ = self.adapter.sync_state()
+            current_state = self.adapter.sync_state()
             logs.append("已同步机器人状态。")
-            safety_checks = self.safety.preflight_release()
-            checked_stages.append("preflight")
+            safety_checks, _ = self._run_precheck(
+                action_name="release",
+                robot_state=current_state,
+                logs=logs,
+                checked_stages=checked_stages,
+            )
+            safety_checks += self.safety.preflight_release()
             robot_state = self.adapter.open_gripper()
             checked_stages.append("adapter_dispatch")
-            safety_checks += self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            safety_checks += self.safety.ensure_telemetry_safe(self._read_telemetry())
             checked_stages.append("telemetry_check")
-            logs.append("已通过 mock LeRobot 适配器打开夹爪。")
+            logs.append(f"已通过 {self.adapter.adapter_name} 打开夹爪。")
             return self._success(
                 "release",
-                "夹爪 mock 释放完成。",
+                "夹爪释放完成。",
                 logs,
                 robot_state=robot_state,
                 validated_params={},
@@ -406,6 +531,27 @@ class ExecutionRuntime:
             )
 
         return self._run_guarded("release", operation)
+
+    def clear_emergency_stop(self) -> ExecutionToolResult:
+        def operation(logs: list[str], checked_stages: list[SafetyStage]) -> ExecutionToolResult:
+            self.adapter.clear_emergency_stop()
+            checked_stages.append("adapter_dispatch")
+            logs.append("已清除急停锁存。")
+            robot_state = self.adapter.sync_state()
+            logs.append("已重新同步机器人状态。")
+            safety_checks = self.safety.ensure_telemetry_safe(self._read_telemetry())
+            checked_stages.append("telemetry_check")
+            return self._success(
+                "clear_emergency_stop",
+                "机器人急停状态已清除。",
+                logs,
+                robot_state=robot_state,
+                validated_params={},
+                safety_checks=safety_checks,
+                checked_stages=checked_stages,
+            )
+
+        return self._run_guarded("clear_emergency_stop", operation)
 
     def run_smolvla(
         self,
@@ -420,6 +566,55 @@ class ExecutionRuntime:
             checked_stages.append("input_validation")
             self.adapter.load_state(validated_robot_state)
             logs.append("SmolVLA 输入校验通过，并已同步外部机器人状态。")
+
+            if self.smolvla.supports_joint_actions:
+                if not self.adapter.supports_joint_action_dispatch:
+                    raise AdapterError(
+                        f"{self.adapter.adapter_name} 不支持 SmolVLA 低层 joint action 执行，请改用 lerobot_local 适配器。"
+                    )
+                current_state = self.adapter.sync_state()
+                logs.append("已同步机器人真实状态，准备执行 SmolVLA 低层动作块。")
+                safety_checks, _ = self._run_precheck(
+                    action_name="run_smolvla",
+                    robot_state=current_state,
+                    logs=logs,
+                    checked_stages=checked_stages,
+                )
+                action_feature_names = self.adapter.get_action_feature_order()
+                joint_actions = self.smolvla.infer_joint_actions(
+                    validated_task,
+                    validated_image,
+                    current_state,
+                    action_feature_names,
+                )
+                if not joint_actions:
+                    raise SmolVLAError("SmolVLA 未生成任何可执行动作。")
+                logs.append(f"SmolVLA 生成 {len(joint_actions)} 条底层 joint action。")
+
+                final_state = current_state
+                action_trace: list[ModelActionTrace] = []
+                checked_stages.append("adapter_dispatch")
+                for index, action in enumerate(joint_actions, start=1):
+                    logs.append(f"执行 SmolVLA 动作 {index}/{len(joint_actions)}。")
+                    final_state = self.adapter.dispatch_joint_action(action)
+                    action_trace.append({"index": index, "targets": dict(action)})
+
+                safety_checks += self.safety.ensure_telemetry_safe(self._read_telemetry())
+                checked_stages.append("telemetry_check")
+                logs.append("SmolVLA 底层动作块执行完成。")
+                return self._success(
+                    "run_smolvla",
+                    "SmolVLA 底层动作执行成功。",
+                    logs,
+                    robot_state=final_state,
+                    validated_params={
+                        "task_description": validated_task,
+                        "current_image": validated_image,
+                    },
+                    safety_checks=safety_checks,
+                    model_actions=action_trace,
+                    checked_stages=checked_stages,
+                )
 
             plan = self.smolvla.plan(validated_task, validated_image, validated_robot_state)
             checked_stages.append("preflight")
@@ -451,7 +646,7 @@ class ExecutionRuntime:
                     )
                 final_state = result["robot_state"]
 
-            safety_checks = self.safety.ensure_telemetry_safe(self.adapter.read_telemetry())
+            safety_checks = self.safety.ensure_telemetry_safe(self._read_telemetry())
             checked_stages.append("telemetry_check")
             logs.append("SmolVLA mock 动作序列执行完成。")
             return self._success(
@@ -490,9 +685,17 @@ def grasp(force: Any | None = None) -> ExecutionToolResult:
     return get_runtime().grasp(force)
 
 
+def servo_rotate(id: Any, degrees: Any) -> ExecutionToolResult:
+    return get_runtime().servo_rotate(id, degrees)
+
+
 def release() -> ExecutionToolResult:
     return get_runtime().release()
 
 
 def run_smolvla(task_description: Any, current_image: Any, robot_state: Any) -> ExecutionToolResult:
     return get_runtime().run_smolvla(task_description, current_image, robot_state)
+
+
+def clear_emergency_stop() -> ExecutionToolResult:
+    return get_runtime().clear_emergency_stop()

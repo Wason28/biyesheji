@@ -6,7 +6,10 @@ const runtimeHost = process.env.EMBODIED_AGENT_HTTP_HOST || "127.0.0.1";
 const runtimePort = process.env.EMBODIED_AGENT_HTTP_PORT || "7860";
 const proxyTarget = process.env.VITE_PROXY_TARGET || `http://${runtimeHost}:${runtimePort}`;
 const runtimeBaseUrl = process.env.VITE_RUNTIME_BASE_URL || `http://${runtimeHost}:${runtimePort}`;
-const pythonExe = process.env.EMBODIED_AGENT_PYTHON || path.join(repoRoot, ".venv", "Scripts", "python.exe");
+const defaultPython = process.platform === "win32"
+  ? path.join(repoRoot, ".venv", "Scripts", "python.exe")
+  : path.join(repoRoot, ".venv", "bin", "python");
+const pythonExe = process.env.EMBODIED_AGENT_PYTHON || defaultPython;
 const pythonPath = [path.join(repoRoot, "src"), process.env.PYTHONPATH].filter(Boolean).join(path.delimiter);
 
 const backend = spawn(

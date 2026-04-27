@@ -9,6 +9,8 @@ function renderStatusLabel(status: string | undefined) {
       return "已完成";
     case "failed":
       return "失败";
+    case "cancelled":
+      return "已结束";
     case "idle":
       return "空闲";
     default:
@@ -31,9 +33,10 @@ export function ControlPanel() {
   const setRequestedRunId = useWorkbenchStore((state) => state.setRequestedRunId);
   const clearInstruction = useWorkbenchStore((state) => state.clearInstruction);
   const submitRun = useWorkbenchStore((state) => state.submitRun);
+  const stopRun = useWorkbenchStore((state) => state.stopRun);
   const initialize = useWorkbenchStore((state) => state.initialize);
   const canSubmit = bootstrapStatus === "ready" && runStatus !== "loading";
-  const interventionRequired = latestRunState?.event === "human_intervention_required";
+  const canStop = snapshot?.status === "running";
 
   return (
     <PanelShell
@@ -100,17 +103,9 @@ export function ControlPanel() {
             <strong>开始</strong>
             <span>真实调用 submitRun()</span>
           </button>
-          <button type="button" className="action-button action-button--disabled" disabled>
+          <button type="button" className="action-button action-button--disabled" onClick={() => void stopRun()} disabled={!canStop}>
             <strong>结束</strong>
-            <span>后端未接线</span>
-          </button>
-          <button type="button" className={`action-button ${interventionRequired ? "action-button--warn" : "action-button--disabled"}`} disabled>
-            <strong>人工干预</strong>
-            <span>{interventionRequired ? "收到人工介入事件" : "后端未接线"}</span>
-          </button>
-          <button type="button" className="action-button action-button--danger" disabled>
-            <strong>紧急中断</strong>
-            <span>后端未接线</span>
+            <span>{canStop ? "结束当前运行任务" : "当前没有运行中的任务"}</span>
           </button>
         </div>
 

@@ -34,6 +34,7 @@ def test_unified_startup_builds_mock_runtime_and_runs_single_task(app_config) ->
     assert final_state["final_report"]["completed"] is True
     assert final_state["selected_capability"] == "pick_and_place"
     assert final_state["selected_action"] == "run_smolvla"
+    assert final_state["assistant_response"]
     tool_names = [call["tool_name"] for call in final_state["debug_metrics"]["tool_calls"]]
     assert "get_image" in tool_names
     assert "get_robot_state" in tool_names
@@ -72,6 +73,7 @@ decision:
   llm_model: gpt-4o-mini
   llm_api_key: ""
   llm_local_path: ./models/llm
+  llm_base_url: http://localhost:8000/v1
   max_iterations: 3
 perception:
   vlm_provider: openai_gpt4o
@@ -79,18 +81,27 @@ perception:
   vlm_api_key: ""
   vlm_local_path: ./models/vlm
   vlm_base_url: http://localhost:11434
-  camera_backend: mock
+  camera_backend: opencv
   camera_device_id: wrist_cam
   camera_frame_id: wrist_camera
   camera_width: 800
   camera_height: 600
-  robot_state_backend: mock
+  camera_index: 1
+  robot_state_backend: mcp_bridge
+  robot_state_base_url: http://127.0.0.1:8765
+  robot_state_config_path: ./configs/robot.yaml
+  robot_pythonpath: /opt/lerobot/src
   robot_state_base_frame: tool0
 execution:
   vla_model_path: ./models/mock
   robot_config: ./configs/mock.yaml
-  robot_adapter: mock_lerobot
+  robot_adapter: mcp_bridge
   smolvla_backend: mock_smolvla
+  robot_base_url: http://127.0.0.1:9901
+  robot_timeout_s: 3.0
+  telemetry_poll_timeout_s: 1.5
+  safety_require_precheck: true
+  robot_pythonpath: /opt/lerobot/src
   safety_policy: fail_closed
   stop_mode: estop_latched
   workspace_limits:
@@ -114,6 +125,7 @@ frontend:
     assert runtime.config.decision.llm_provider == "openai"
     assert runtime.config.decision.llm_model == "gpt-4o-mini"
     assert runtime.config.decision.llm_local_path == "./models/llm"
+    assert runtime.config.decision.llm_base_url == "http://localhost:8000/v1"
     assert runtime.config.perception.vlm_provider == "openai_gpt4o"
     assert runtime.config.perception.vlm_model == "gpt-4o"
     assert runtime.config.perception.vlm_local_path == "./models/vlm"
@@ -123,8 +135,13 @@ frontend:
     assert runtime.decision.deps.max_iterations == 3
     assert runtime.execution._runtime.config.vla_model_path == "./models/mock"
     assert runtime.execution._runtime.config.robot_config == "./configs/mock.yaml"
-    assert runtime.execution._runtime.config.robot_adapter == "mock_lerobot"
+    assert runtime.execution._runtime.config.robot_adapter == "mcp_bridge"
     assert runtime.execution._runtime.config.smolvla_backend == "mock_smolvla"
+    assert runtime.execution._runtime.config.robot_base_url == "http://127.0.0.1:9901"
+    assert runtime.execution._runtime.config.robot_timeout_s == 3.0
+    assert runtime.execution._runtime.config.telemetry_poll_timeout_s == 1.5
+    assert runtime.execution._runtime.config.safety_require_precheck is True
+    assert runtime.execution._runtime.config.robot_pythonpath == "/opt/lerobot/src"
     assert runtime.execution._runtime.config.safety_policy == "fail_closed"
     assert runtime.execution._runtime.config.stop_mode == "estop_latched"
     assert runtime.execution._runtime.config.workspace_limits == {
@@ -136,9 +153,98 @@ frontend:
     assert runtime.perception.perception_config.vlm_provider == "openai_gpt4o"
     assert runtime.perception.perception_config.vlm_model == "gpt-4o"
     assert runtime.perception.perception_config.vlm_local_path == "./models/vlm"
+    assert runtime.perception.perception_config.camera_backend == "opencv"
     assert runtime.perception.perception_config.camera_device_id == "wrist_cam"
     assert runtime.perception.perception_config.camera_frame_id == "wrist_camera"
+    assert runtime.perception.perception_config.camera_index == 1
+    assert runtime.perception.perception_config.robot_state_backend == "mcp_bridge"
+    assert runtime.perception.perception_config.robot_state_base_url == "http://127.0.0.1:8765"
+    assert runtime.perception.perception_config.robot_state_config_path == "./configs/robot.yaml"
+    assert runtime.perception.perception_config.robot_pythonpath == "/opt/lerobot/src"
     assert runtime.perception.perception_config.robot_state_base_frame == "tool0"
+
+
+def test_unified_startup_expands_env_variables_in_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TEST_LLM_BASE_URL", "https://llm.example.com/v1")
+    monkeypatch.setenv("TEST_VLM_BASE_URL", "https://vlm.example.com/v1")
+    monkeypatch.setenv("TEST_LLM_MODEL", "gpt-5.4-mini")
+
+    config_path = tmp_path / "env-config.yaml"
+    config_path.write_text(
+        """
+decision:
+  llm_provider: openai
+  llm_model: ${TEST_LLM_MODEL}
+  llm_base_url: ${TEST_LLM_BASE_URL}
+perception:
+  vlm_provider: openai_gpt4o
+  vlm_model: qwen-vl
+  vlm_base_url: ${TEST_VLM_BASE_URL}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    runtime = build_runtime_from_config(config_path)
+
+    assert runtime.config.decision.llm_model == "gpt-5.4-mini"
+    assert runtime.config.decision.llm_base_url == "https://llm.example.com/v1"
+    assert runtime.config.perception.vlm_base_url == "https://vlm.example.com/v1"
+
+
+@pytest.mark.parametrize(
+    ("config_name", "env_values", "expected_robot_state_backend", "expected_robot_adapter"),
+    [
+        (
+            "phase4_real_opencv_mcp_bridge.example.yaml",
+            {
+                "EMBODIED_AGENT_LLM_FALLBACK_MODEL": "gpt-4o-mini",
+                "EMBODIED_AGENT_LLM_FALLBACK_API_KEY": "decision-secret",
+                "EMBODIED_AGENT_LLM_FALLBACK_BASE_URL": "https://llm.example.com/v1",
+                "EMBODIED_AGENT_VLM_MODEL": "gpt-4o",
+                "EMBODIED_AGENT_VLM_API_KEY": "perception-secret",
+                "EMBODIED_AGENT_VLM_BASE_URL": "https://vlm.example.com/v1",
+                "EMBODIED_AGENT_CAMERA_DEVICE_ID": "/dev/video0",
+                "EMBODIED_AGENT_CAMERA_FRAME_ID": "wrist_camera",
+                "EMBODIED_AGENT_ROBOT_BRIDGE_BASE_URL": "http://127.0.0.1:8765",
+            },
+            "mcp_bridge",
+            "mcp_bridge",
+        ),
+        (
+            "phase4_real_opencv_lerobot_local.example.yaml",
+            {
+                "EMBODIED_AGENT_LLM_FALLBACK_MODEL": "gpt-4o-mini",
+                "EMBODIED_AGENT_LLM_FALLBACK_API_KEY": "decision-secret",
+                "EMBODIED_AGENT_LLM_FALLBACK_BASE_URL": "https://llm.example.com/v1",
+                "EMBODIED_AGENT_VLM_MODEL": "gpt-4o",
+                "EMBODIED_AGENT_VLM_API_KEY": "perception-secret",
+                "EMBODIED_AGENT_VLM_BASE_URL": "https://vlm.example.com/v1",
+                "EMBODIED_AGENT_CAMERA_DEVICE_ID": "/dev/video2",
+                "EMBODIED_AGENT_CAMERA_FRAME_ID": "overhead_camera",
+                "EMBODIED_AGENT_LEROBOT_CONFIG_PATH": "./lerobot_configs/my_robot.yaml",
+                "EMBODIED_AGENT_LEROBOT_PYTHONPATH": "/opt/lerobot/src",
+            },
+            "lerobot_local",
+            "lerobot_local",
+        ),
+    ],
+)
+def test_phase4_real_example_configs_load_with_expected_backends(
+    monkeypatch: pytest.MonkeyPatch,
+    config_name: str,
+    env_values: dict[str, str],
+    expected_robot_state_backend: str,
+    expected_robot_adapter: str,
+) -> None:
+    for key, value in env_values.items():
+        monkeypatch.setenv(key, value)
+
+    runtime = build_runtime_from_config(Path("config") / config_name)
+
+    assert runtime.config.perception.camera_backend == "opencv"
+    assert runtime.config.perception.robot_state_backend == expected_robot_state_backend
+    assert runtime.config.execution.robot_adapter == expected_robot_adapter
+    assert runtime.config.execution.safety_require_precheck is True
 
 
 def test_unified_startup_uses_frontend_max_iterations_when_decision_limit_is_non_positive(tmp_path: Path) -> None:
@@ -332,6 +438,8 @@ def test_frontend_run_snapshot_normalizes_completed_state_for_ui(app_config) -> 
 
     assert snapshot["run_id"] == "run-001"
     assert snapshot["status"] == "completed"
+    assert snapshot["user_instruction"] == "抓取桌面方块"
+    assert snapshot["assistant_response"]
     assert snapshot["current_phase"] == "final_status"
     assert snapshot["current_node"] == "final_status"
     assert snapshot["current_task"] == ""
@@ -399,15 +507,18 @@ def test_frontend_bootstrap_and_config_payloads_expose_phase2_placeholders(app_c
     assert bootstrap["execution_model"]["adapter"] == "mock_lerobot"
     assert bootstrap["execution_model"]["backend"] == "mock_smolvla"
     assert bootstrap["execution_model"]["capability_names"] == ["pick_and_place"]
-    assert len(bootstrap["tools"]) == 8
+    assert len(bootstrap["tools"]) == 10
     assert {tool["layer"] for tool in bootstrap["tools"]} == {"perception", "execution"}
     assert any(tool["name"] == "run_smolvla" and tool["capability_names"] == ["pick_and_place"] for tool in bootstrap["tools"])
+    assert any(tool["name"] == "clear_emergency_stop" for tool in bootstrap["tools"])
     assert bootstrap["execution_capabilities"]
     assert any(capability["capability_name"] == "pick_and_place" for capability in bootstrap["execution_capabilities"])
     assert bootstrap["execution_safety"]["adapter_name"] == "mock_lerobot"
     assert bootstrap["execution_safety"]["manual_reset_required"] is True
     assert "current_phase" in bootstrap["status_fields"]
     assert "current_node" in bootstrap["status_fields"]
+    assert "user_instruction" in bootstrap["status_fields"]
+    assert "assistant_response" in bootstrap["status_fields"]
     assert "selected_action" in bootstrap["status_fields"]
     assert "termination_reason" in bootstrap["status_fields"]
     assert "final_report" in bootstrap["status_fields"]

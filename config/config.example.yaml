@@ -3,6 +3,7 @@ decision:
   llm_model: MiniMax-M2.1
   llm_api_key: ""
   llm_local_path: ""
+  llm_base_url: ""
   max_iterations: 10
 
 perception:
@@ -20,16 +21,28 @@ perception:
   camera_width: 640
   camera_height: 480
   camera_fps: 30.0
+  camera_index: 0
+  camera_backend_options: {}
   robot_state_backend: mock
   robot_state_topic: /mock/robot_state
+  robot_state_config_path: ""
   robot_state_base_frame: base_link
   robot_state_timeout_s: 1.0
+  robot_state_base_url: ""
+  robot_state_headers: {}
+  robot_pythonpath: ""
 
 execution:
   vla_model_path: ./models/smolvla_finetuned
   robot_config: ./lerobot_configs/my_robot.yaml
   robot_adapter: mock_lerobot
   smolvla_backend: mock_smolvla
+  robot_base_url: ""
+  robot_headers: {}
+  robot_timeout_s: 2.0
+  telemetry_poll_timeout_s: 1.0
+  safety_require_precheck: true
+  robot_pythonpath: ""
   safety_policy: fail_closed
   stop_mode: estop_latched
   workspace_limits:

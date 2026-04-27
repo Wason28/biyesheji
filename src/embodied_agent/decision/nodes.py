@@ -51,9 +51,234 @@ class NodeDependencies:
 
 
 def _split_into_tasks(user_instruction: str) -> list[str]:
-    raw_parts = re.split(r"(?:\r?\n|。|；|;|然后|接着)", user_instruction)
+    raw_parts = re.split(r"(?:\r?\n|。|；|;|，|、|然后|接着)", user_instruction)
     tasks = [part.strip(" ，,") for part in raw_parts if part and part.strip(" ，,")]
     return tasks or [user_instruction.strip()] if user_instruction.strip() else []
+
+
+def _normalize_task_text(task: str) -> str:
+    normalized = task.strip().lower()
+    replacements = {
+        "左传": "左转",
+        "右传": "右转",
+    }
+    for source, target in replacements.items():
+        normalized = normalized.replace(source, target)
+    normalized = re.sub(r"(\d+)\s*后(?=(?:左|右|转|旋转|转动))", r"\1号", normalized)
+    return normalized
+
+
+def _extract_servo_action_args(task: str) -> dict[str, Any] | None:
+    normalized_task = _normalize_task_text(task)
+    if not (
+        any(keyword in normalized_task for keyword in ("舵机", "关节", "servo", "joint"))
+        or re.search(r"\d+\s*号\s*(?:左转|右转|转|旋转|转动)", normalized_task)
+    ):
+        return None
+    if not any(keyword in normalized_task for keyword in ("左转", "右转", "转", "旋转", "转动", "rotate")):
+        return None
+
+    servo_id: int | None = None
+    for pattern in (
+        r"(\d+)\s*号?\s*(?:舵机|关节)",
+        r"(?:舵机|关节)\s*(\d+)",
+        r"(\d+)\s*号",
+        r"servo\s*(\d+)",
+        r"joint\s*(\d+)",
+    ):
+        match = re.search(pattern, normalized_task, re.IGNORECASE)
+        if match is not None:
+            servo_id = int(match.group(1))
+            break
+
+    degrees: float | None = None
+    motion_match = re.search(
+        r"(左转|右转|旋转|转动|转|rotate)\s*([+-]?\d+(?:\.\d+)?)\s*(?:度|°|deg|degree|degrees)?",
+        normalized_task,
+        re.IGNORECASE,
+    )
+    if motion_match is not None:
+        direction = motion_match.group(1)
+        degrees_text = motion_match.group(2)
+        degrees = float(degrees_text)
+        if not degrees_text.startswith(("+", "-")):
+            if direction == "右转":
+                degrees = -degrees
+            elif direction == "左转":
+                degrees = abs(degrees)
+
+    for pattern in (
+        r"([+-]?\d+(?:\.\d+)?)\s*(?:度|°)",
+        r"([+-]?\d+(?:\.\d+)?)\s*(?:deg|degree|degrees)",
+    ):
+        if degrees is not None:
+            break
+        match = re.search(pattern, normalized_task, re.IGNORECASE)
+        if match is not None:
+            degrees = float(match.group(1))
+            break
+
+    if servo_id is None or degrees is None:
+        return None
+
+    return {
+        "id": servo_id,
+        "degrees": degrees,
+    }
+
+
+def _is_home_task(normalized_task: str) -> bool:
+    return any(
+        keyword in normalized_task
+        for keyword in ("回到安全位置", "回零", "回原点", "归位", "回位", "move home", "home")
+    )
+
+
+def _is_servo_task(normalized_task: str) -> bool:
+    return (
+        (
+            any(keyword in normalized_task for keyword in ("舵机", "关节", "servo", "joint"))
+            or re.search(r"\d+\s*号\s*(?:左转|右转|转|旋转|转动)", normalized_task) is not None
+        )
+        and any(keyword in normalized_task for keyword in ("左转", "右转", "转", "旋转", "转动", "rotate"))
+    )
+
+
+def _is_release_task(normalized_task: str) -> bool:
+    return any(keyword in normalized_task for keyword in ("释放", "松开", "放下", "release"))
+
+
+def _is_scene_query_task(normalized_task: str) -> bool:
+    if any(keyword in normalized_task for keyword in ("抓", "取", "pick", "grasp", "归位", "回零", "回原点", "舵机", "关节")):
+        return False
+    return any(
+        keyword in normalized_task
+        for keyword in ("看到什么", "看到了什么", "看看", "画面", "场景", "描述", "识别", "观察", "图里", "相机")
+    )
+
+
+def _resolve_strict_atomic_plan(
+    current_task: str,
+    state: DecisionAgentState,
+) -> tuple[str, str, dict[str, Any]] | None:
+    normalized_task = _normalize_task_text(current_task)
+    if _is_home_task(normalized_task):
+        return "return_home", "move_home", {}
+    if _is_servo_task(normalized_task):
+        servo_action_args = _extract_servo_action_args(current_task)
+        if servo_action_args is None:
+            raise ValueError("舵机任务缺少明确的编号或角度，无法生成安全 MCP 调用")
+        return "servo_control", "servo_rotate", servo_action_args
+    if _is_release_task(normalized_task):
+        return "release_object", "release", {}
+    if _is_scene_query_task(normalized_task):
+        return (
+            "scene_understanding",
+            "describe_scene",
+            {
+                "image": state.get("current_image", ""),
+                "prompt": f"请直接回答用户问题：{current_task}",
+            },
+        )
+
+    scene_observations = state.get("scene_observations", {})
+    robot_grasp_state = str(scene_observations.get("robot_grasp_state", "")).lower()
+    if robot_grasp_state == "closed" and any(keyword in normalized_task for keyword in ("放", "置", "release", "drop")):
+        return "release_object", "release", {}
+    if any(keyword in normalized_task for keyword in ("放", "置", "drop", "place")):
+        return "release_object", "release", {}
+    return None
+
+
+def _enforce_task_action_alignment(
+    *,
+    current_task: str,
+    state: DecisionAgentState,
+    selected_capability: str,
+    selected_action: str,
+    selected_action_args: dict[str, Any],
+) -> tuple[str, str, dict[str, Any], str | None]:
+    strict_plan = _resolve_strict_atomic_plan(current_task, state)
+    if strict_plan is None:
+        return selected_capability, selected_action, selected_action_args, None
+
+    expected_capability, expected_action, expected_args = strict_plan
+    if selected_action != expected_action or selected_capability != expected_capability:
+        return (
+            expected_capability,
+            expected_action,
+            dict(expected_args),
+            f"task_requires_{expected_action}",
+        )
+
+    if expected_action == "servo_rotate":
+        if selected_action_args != expected_args:
+            return (
+                expected_capability,
+                expected_action,
+                dict(expected_args),
+                "task_requires_exact_servo_arguments",
+            )
+    elif expected_action in {"move_home", "release"} and selected_action_args:
+        return (
+            expected_capability,
+            expected_action,
+            dict(expected_args),
+            f"task_requires_empty_arguments_for_{expected_action}",
+        )
+
+    return expected_capability, expected_action, dict(expected_args), None
+
+
+def _supports_proprioceptive_feedback(
+    current_task: str,
+    state: DecisionAgentState,
+) -> bool:
+    normalized_task = _normalize_task_text(current_task)
+    if _is_home_task(normalized_task) or _is_servo_task(normalized_task):
+        return True
+    _, selected_action, _ = _select_capability_and_action(current_task, state)
+    return selected_action in {"servo_rotate", "move_home"}
+
+
+def _resolve_proprioceptive_action_name(
+    current_task: str,
+    state: DecisionAgentState,
+) -> str:
+    normalized_task = _normalize_task_text(current_task)
+    if _is_home_task(normalized_task):
+        return "move_home"
+    if _is_servo_task(normalized_task):
+        return "servo_rotate"
+    _, selected_action, _ = _select_capability_and_action(current_task, state)
+    return selected_action
+
+
+def _build_proprioceptive_scene_summary(
+    *,
+    current_task: str,
+    selected_action: str,
+    robot_state: dict[str, Any],
+) -> tuple[str, dict[str, Any], float]:
+    joint_positions = robot_state.get("joint_positions", []) if isinstance(robot_state, dict) else []
+    joint_count = len(joint_positions) if isinstance(joint_positions, list) else 0
+    action_label = "单关节旋转" if selected_action == "servo_rotate" else "安全归位"
+    scene_description = (
+        f"当前任务“{current_task}”采用机器人关节状态闭环感知。"
+        f"已读取 {joint_count} 个关节位置，当前执行策略为{action_label}。"
+    )
+    return (
+        scene_description,
+        {
+            "objects": [],
+            "relations": [],
+            "robot_grasp_state": "unknown",
+            "risk_flags": [],
+            "perception_mode": "proprioceptive",
+            "joint_state_available": joint_count > 0,
+        },
+        0.92,
+    )
 
 
 def _normalize_execution_result(
@@ -96,6 +321,10 @@ def _select_capability_and_action(
     state: DecisionAgentState,
 ) -> tuple[str, str, dict[str, Any]]:
     normalized_task = current_task.strip().lower()
+    strict_plan = _resolve_strict_atomic_plan(current_task, state)
+    if strict_plan is not None:
+        return strict_plan
+
     scene_observations = state.get("scene_observations", {})
     robot_grasp_state = str(scene_observations.get("robot_grasp_state", "")).lower()
     risk_flags = scene_observations.get("risk_flags", []) if isinstance(scene_observations, dict) else []
@@ -109,20 +338,151 @@ def _select_capability_and_action(
         "current_image": state.get("current_image", ""),
         "robot_state": state.get("robot_state", {}),
     }
-
-    if any(keyword in normalized_task for keyword in ("回到安全位置", "回零", "回原点", "move home", "home")):
-        return "return_home", "move_home", {}
-    if any(keyword in normalized_task for keyword in ("释放", "松开", "放下", "release")):
-        return "release_object", "release", {}
-    if robot_grasp_state == "closed" and any(keyword in normalized_task for keyword in ("放", "置", "release", "drop")):
-        return "release_object", "release", {}
     if any(keyword in normalized_task for keyword in ("抓", "取", "pick", "grasp")):
         if risk_flags or has_explicit_ungraspable_object:
             return "return_home", "move_home", {}
         return "pick_and_place", "run_smolvla", base_arguments
-    if any(keyword in normalized_task for keyword in ("放", "置", "drop", "place")):
-        return "release_object", "release", {}
     return "pick_and_place", "run_smolvla", base_arguments
+
+
+_VALID_CAPABILITIES = {"pick_and_place", "return_home", "release_object", "servo_control", "scene_understanding"}
+_VALID_ACTIONS = {"move_to", "move_home", "grasp", "release", "servo_rotate", "run_smolvla", "describe_scene"}
+_ACTION_ALIASES = {
+    "pick": "grasp",
+    "pick_object": "grasp",
+    "grasp_object": "grasp",
+    "grab": "grasp",
+    "release_object": "release",
+    "drop_object": "release",
+    "open_gripper": "release",
+    "return_home": "move_home",
+    "go_home": "move_home",
+    "home": "move_home",
+    "pick_and_place": "run_smolvla",
+    "execute_pick_and_place": "run_smolvla",
+    "pick_place": "run_smolvla",
+    "verify_grasp": "grasp",
+    "rotate_servo": "servo_rotate",
+    "servo": "servo_rotate",
+}
+_CAPABILITY_BY_ACTION = {
+    "move_home": "return_home",
+    "release": "release_object",
+    "servo_rotate": "servo_control",
+    "describe_scene": "scene_understanding",
+    "move_to": "pick_and_place",
+    "grasp": "pick_and_place",
+    "run_smolvla": "pick_and_place",
+}
+_CAPABILITY_ALIASES = {
+    "grasp": "pick_and_place",
+    "grasp_object": "pick_and_place",
+    "pick": "pick_and_place",
+    "pick_object": "pick_and_place",
+    "pick_place": "pick_and_place",
+    "move_home": "return_home",
+    "go_home": "return_home",
+    "home": "return_home",
+    "release": "release_object",
+    "drop": "release_object",
+    "servo_control": "servo_control",
+    "servo_rotate": "servo_control",
+    "servo": "servo_control",
+    "scene_understanding": "scene_understanding",
+    "describe_scene": "scene_understanding",
+}
+
+
+def _normalize_provider_action_plan(
+    *,
+    selected_capability: str,
+    selected_action: str,
+    selected_action_args: dict[str, Any],
+    current_task: str,
+    state: DecisionAgentState,
+) -> tuple[str, str, dict[str, Any]]:
+    normalized_capability = _CAPABILITY_ALIASES.get(selected_capability.strip(), selected_capability.strip())
+    normalized_action = _ACTION_ALIASES.get(selected_action.strip(), selected_action.strip())
+    normalized_args = dict(selected_action_args)
+
+    if not normalized_capability and normalized_action in _CAPABILITY_BY_ACTION:
+        normalized_capability = _CAPABILITY_BY_ACTION[normalized_action]
+
+    if normalized_action not in _VALID_ACTIONS:
+        normalized_action = ""
+    if normalized_capability not in _VALID_CAPABILITIES:
+        normalized_capability = ""
+
+    if normalized_action == "run_smolvla":
+        normalized_args = {
+            "task_description": current_task,
+            "current_image": state.get("current_image", ""),
+            "robot_state": state.get("robot_state", {}),
+            **normalized_args,
+        }
+    elif normalized_action == "describe_scene":
+        normalized_args = {
+            "image": str(state.get("current_image", "")),
+            "prompt": str(normalized_args.get("prompt") or f"请直接回答用户问题：{current_task}"),
+        }
+    elif normalized_action in {"move_home", "release"}:
+        normalized_args = {}
+
+    return normalized_capability, normalized_action, normalized_args
+
+
+def _build_assistant_response(
+    *,
+    current_task: str,
+    scene_description: str,
+    selected_action: str,
+    planner_reason: str,
+) -> str:
+    action_phrases = {
+        "move_home": "先回到安全位置",
+        "release": "先松开夹爪释放目标",
+        "grasp": "先尝试执行抓取",
+        "move_to": "先移动到目标位姿",
+        "servo_rotate": "先执行单关节安全旋转",
+        "run_smolvla": "我准备执行完整抓取动作",
+        "describe_scene": "先直接描述当前画面",
+    }
+    action_phrase = action_phrases.get(selected_action, "我准备继续执行当前任务")
+    scene_excerpt = scene_description.strip()
+    if len(scene_excerpt) > 80:
+        scene_excerpt = f"{scene_excerpt[:80].rstrip()}…"
+    parts = []
+    if scene_excerpt:
+        parts.append(f"我观察到：{scene_excerpt}")
+    parts.append(f"针对“{current_task}”，{action_phrase}。")
+    if planner_reason.strip():
+        parts.append(f"原因：{planner_reason.strip()}")
+    return " ".join(parts)
+
+
+def _build_terminal_assistant_response(
+    *,
+    current_task: str,
+    completed: bool,
+    termination_reason: str,
+    selected_action: str,
+    scene_description: str,
+) -> str:
+    if completed:
+        if selected_action == "describe_scene" and scene_description.strip():
+            return scene_description.strip()
+        return (
+            f"任务已完成。针对“{current_task or '当前任务'}”，我已经执行 `{selected_action or '当前动作'}`，"
+            f"并完成本轮闭环。"
+        )
+    scene_excerpt = scene_description.strip()
+    if len(scene_excerpt) > 60:
+        scene_excerpt = f"{scene_excerpt[:60].rstrip()}…"
+    detail = f" 当前观察：{scene_excerpt}" if scene_excerpt else ""
+    return (
+        f"这次任务没有成功完成，终止原因是 `{termination_reason or 'unknown'}`。"
+        f"我最后尝试的动作是 `{selected_action or 'unknown'}`。{detail}"
+    )
 
 
 def _run_node(
@@ -257,24 +617,53 @@ def sensory_node(state: DecisionAgentState, deps: NodeDependencies) -> DecisionA
         if not robot_response.get("ok"):
             raise RuntimeError(robot_response.get("message", "get_robot_state failed"))
 
+        next_state = dict(working_state)
+        next_state["current_image"] = str(image_response.get("content", ""))
+        next_state["robot_state"] = dict(robot_response.get("content", {}))
+
         scene_response = runtime_deps.mcp_client.describe_scene(
             str(image_response.get("content", "")),
             prompt=prompt,
         )
         working_state = _record_tool_response(working_state, response=scene_response)
-        if not scene_response.get("ok"):
+        if not scene_response.get("ok") and not _supports_proprioceptive_feedback(current_task, normalized_state):
             raise RuntimeError(scene_response.get("message", "describe_scene failed"))
-
-        scene_metadata = dict(scene_response.get("metadata", {})) if isinstance(scene_response.get("metadata"), dict) else {}
-        structured_observations = dict(scene_metadata.get("structured_observations", {}))
-        confidence = float(scene_metadata.get("confidence", 0.0) or 0.0)
 
         next_state = dict(working_state)
         next_state["current_image"] = str(image_response.get("content", ""))
         next_state["robot_state"] = dict(robot_response.get("content", {}))
-        next_state["scene_description"] = str(scene_response.get("content", ""))
-        next_state["scene_observations"] = structured_observations
-        next_state["perception_confidence"] = confidence
+
+        if scene_response.get("ok"):
+            scene_metadata = (
+                dict(scene_response.get("metadata", {}))
+                if isinstance(scene_response.get("metadata"), dict)
+                else {}
+            )
+            structured_observations = dict(scene_metadata.get("structured_observations", {}))
+            confidence = float(scene_metadata.get("confidence", 0.0) or 0.0)
+            perception_mode = "vision"
+            provider_name = scene_metadata.get("provider", runtime_deps.config.perception.vlm_provider)
+            model_name = scene_metadata.get("model", runtime_deps.config.perception.vlm_model)
+            next_state["scene_description"] = str(scene_response.get("content", ""))
+            next_state["scene_observations"] = structured_observations
+            next_state["perception_confidence"] = confidence
+        else:
+            selected_capability, selected_action, _ = _select_capability_and_action(current_task, next_state)
+            del selected_capability
+            (
+                next_state["scene_description"],
+                next_state["scene_observations"],
+                confidence,
+            ) = _build_proprioceptive_scene_summary(
+                current_task=current_task,
+                selected_action=selected_action,
+                robot_state=next_state["robot_state"],
+            )
+            next_state["perception_confidence"] = confidence
+            perception_mode = "vision_fallback_to_proprioceptive"
+            provider_name = "robot_state"
+            model_name = "joint_state_closed_loop"
+
         next_state = set_last_node_result(
             next_state,
             node="sensory",
@@ -282,8 +671,9 @@ def sensory_node(state: DecisionAgentState, deps: NodeDependencies) -> DecisionA
             message="多模态环境感知完成",
             metadata={
                 "confidence": confidence,
-                "provider": scene_metadata.get("provider", runtime_deps.config.perception.vlm_provider),
-                "model": scene_metadata.get("model", runtime_deps.config.perception.vlm_model),
+                "provider": provider_name,
+                "model": model_name,
+                "perception_mode": perception_mode,
             },
         )
         return append_history(
@@ -294,6 +684,7 @@ def sensory_node(state: DecisionAgentState, deps: NodeDependencies) -> DecisionA
             metadata={
                 "phase": "sensory",
                 "confidence": confidence,
+                "perception_mode": perception_mode,
                 "scene_description": next_state["scene_description"],
             },
             history_limit=runtime_deps.max_history_entries,
@@ -396,7 +787,11 @@ def task_planning_node(state: DecisionAgentState, deps: NodeDependencies) -> Dec
         selected_action = ""
         selected_action_args: dict[str, Any] = {}
         planner_reason = "基于当前任务与感知结果生成执行路径"
+        assistant_response = ""
         provider_metadata = dict(runtime_deps.provider_metadata)
+        action_alignment_override: str | None = None
+        planning_error = ""
+        strict_atomic_plan: tuple[str, str, dict[str, Any]] | None = None
 
         try:
             planner = build_decision_provider(runtime_deps.config.decision)
@@ -410,30 +805,80 @@ def task_planning_node(state: DecisionAgentState, deps: NodeDependencies) -> Dec
             selected_capability = str(provider_plan.get("selected_capability", "")).strip()
             selected_action = str(provider_plan.get("selected_action", "")).strip()
             selected_action_args = dict(provider_plan.get("selected_action_args", {})) if isinstance(provider_plan.get("selected_action_args"), dict) else {}
+            selected_capability, selected_action, selected_action_args = _normalize_provider_action_plan(
+                selected_capability=selected_capability,
+                selected_action=selected_action,
+                selected_action_args=selected_action_args,
+                current_task=current_task,
+                state=normalized_state,
+            )
             planner_reason = str(provider_plan.get("reason", planner_reason)).strip() or planner_reason
+            assistant_response = str(provider_plan.get("assistant_response", "")).strip()
             provider_metadata = dict(provider_plan.get("provider_metadata", provider_metadata))
         except (DecisionProviderError, ValueError, TypeError, json.JSONDecodeError):
             selected_capability = ""
             selected_action = ""
             selected_action_args = {}
 
-        if not selected_capability or not selected_action:
-            selected_capability, selected_action, selected_action_args = _select_capability_and_action(
-                current_task,
-                normalized_state,
+        try:
+            (
+                selected_capability,
+                selected_action,
+                selected_action_args,
+                action_alignment_override,
+            ) = _enforce_task_action_alignment(
+                current_task=current_task,
+                state=normalized_state,
+                selected_capability=selected_capability,
+                selected_action=selected_action,
+                selected_action_args=selected_action_args,
             )
-            provider_metadata = {
-                **provider_metadata,
-                "fallback_used": True,
-                "fallback_strategy": "heuristic_task_planning",
-            }
+            strict_atomic_plan = _resolve_strict_atomic_plan(current_task, normalized_state)
+        except ValueError as exc:
+            selected_capability = ""
+            selected_action = ""
+            selected_action_args = {}
+            planning_error = str(exc)
+
+        if not selected_capability or not selected_action:
+            if planning_error:
+                provider_metadata = {
+                    **provider_metadata,
+                    "fallback_used": False,
+                    "alignment_error": planning_error,
+                }
+            else:
+                selected_capability, selected_action, selected_action_args = _select_capability_and_action(
+                    current_task,
+                    normalized_state,
+                )
+                provider_metadata = {
+                    **provider_metadata,
+                    "fallback_used": True,
+                    "fallback_strategy": "heuristic_task_planning",
+                }
         else:
             provider_metadata = {
                 **provider_metadata,
                 "fallback_used": False,
             }
+        if action_alignment_override:
+            provider_metadata["alignment_override"] = action_alignment_override
+
+        if planning_error:
+            assistant_response = planning_error
+            next_state["action_result"] = "failed"
+            next_state["termination_reason"] = "task_planning_failed"
+        elif strict_atomic_plan is not None or not assistant_response:
+            assistant_response = _build_assistant_response(
+                current_task=current_task,
+                scene_description=str(normalized_state.get("scene_description", "")),
+                selected_action=selected_action,
+                planner_reason=planner_reason,
+            )
 
         next_state["current_task"] = current_task
+        next_state["assistant_response"] = assistant_response
         next_state["selected_capability"] = selected_capability
         next_state["selected_capability_args"] = dict(selected_action_args)
         next_state["selected_action"] = selected_action
@@ -467,19 +912,21 @@ def task_planning_node(state: DecisionAgentState, deps: NodeDependencies) -> Dec
                 "selected_capability": selected_capability,
                 "selected_action": selected_action,
                 "current_task": current_task,
+                "assistant_response": assistant_response,
                 "provider_metadata": provider_metadata,
             },
         )
         return append_history(
             next_state,
             node="task_planning",
-            message=f"为任务规划动作: {selected_capability} -> {selected_action}",
+            message=assistant_response,
             status="ok",
             metadata={
                 "phase": "task_planning",
                 "task": current_task,
                 "capability": selected_capability,
                 "action": selected_action,
+                "assistant_response": assistant_response,
                 "provider_metadata": provider_metadata,
             },
             history_limit=runtime_deps.max_history_entries,
@@ -544,6 +991,52 @@ def motion_control_node(state: DecisionAgentState, deps: NodeDependencies) -> De
                 history_limit=runtime_deps.max_history_entries,
             )
 
+        if selected_action == "describe_scene":
+            next_state = dict(normalized_state)
+            execution_result = {
+                "status": "success",
+                "action_name": "describe_scene",
+                "message": str(normalized_state.get("scene_description", "")).strip() or "场景感知已完成。",
+                "logs": ["describe_scene: 复用本轮 sensory 阶段的视觉感知结果。"],
+            }
+            next_state["last_execution"] = execution_result
+            next_state["execution_feedback"] = {
+                "selected_capability": selected_capability,
+                "selected_action": selected_action,
+                "result": dict(execution_result),
+                "tool_ok": True,
+                "tool_status_code": 200,
+                "metadata": {
+                    "source": "sensory_cache",
+                    "structured_observations": dict(normalized_state.get("scene_observations", {})),
+                    "confidence": float(normalized_state.get("perception_confidence", 0.0) or 0.0),
+                },
+            }
+            next_state["action_result"] = "success"
+            next_state = set_last_node_result(
+                next_state,
+                node="motion_control",
+                status_code=200,
+                message=str(execution_result["message"]),
+                metadata={
+                    "selected_capability": selected_capability,
+                    "selected_action": selected_action,
+                    "tool_ok": True,
+                },
+            )
+            return append_history(
+                next_state,
+                node="motion_control",
+                message="执行动作 describe_scene",
+                status="ok",
+                metadata={
+                    "phase": "motion_control",
+                    "selected_capability": selected_capability,
+                    "execution_result": execution_result,
+                },
+                history_limit=runtime_deps.max_history_entries,
+            )
+
         response = runtime_deps.mcp_client.call_tool(
             selected_action,
             dict(normalized_state.get("selected_action_args", {})),
@@ -556,6 +1049,14 @@ def motion_control_node(state: DecisionAgentState, deps: NodeDependencies) -> De
 
         next_state = dict(working_state)
         next_state["last_execution"] = execution_result
+        content = response.get("content")
+        if bool(response.get("ok")) and isinstance(content, dict) and isinstance(content.get("robot_state"), dict):
+            next_state["robot_state"] = dict(content.get("robot_state", {}))
+        if bool(response.get("ok")) and selected_action == "describe_scene":
+            next_state["scene_description"] = str(content or "")
+            metadata = dict(response.get("metadata", {})) if isinstance(response.get("metadata"), dict) else {}
+            next_state["scene_observations"] = dict(metadata.get("structured_observations", {}))
+            next_state["perception_confidence"] = float(metadata.get("confidence", next_state.get("perception_confidence", 0.0)) or 0.0)
         next_state["execution_feedback"] = {
             "selected_capability": selected_capability,
             "selected_action": selected_action,
@@ -598,21 +1099,49 @@ def verification_node(state: DecisionAgentState, deps: NodeDependencies) -> Deci
         next_state = record_decision_cycle(next_state)
         next_state["iteration_count"] = int(normalized_state.get("iteration_count", 0)) + 1
 
-        verify_image_response = runtime_deps.mcp_client.get_image()
-        next_state = _record_tool_response(next_state, response=verify_image_response)
-        if verify_image_response.get("ok"):
-            next_state["current_image"] = str(verify_image_response.get("content", ""))
+        current_task = str(next_state.get("current_task", "")).strip()
+        proprioceptive_only = _supports_proprioceptive_feedback(current_task, next_state)
 
-        verify_scene_response = runtime_deps.mcp_client.describe_scene(
-            str(next_state.get("current_image", "")),
-            prompt=f"验证任务是否完成: {next_state.get('current_task', '')}",
-        )
-        next_state = _record_tool_response(next_state, response=verify_scene_response)
-        if verify_scene_response.get("ok"):
-            verify_metadata = dict(verify_scene_response.get("metadata", {})) if isinstance(verify_scene_response.get("metadata"), dict) else {}
-            next_state["scene_description"] = str(verify_scene_response.get("content", ""))
-            next_state["scene_observations"] = dict(verify_metadata.get("structured_observations", {}))
-            next_state["perception_confidence"] = float(verify_metadata.get("confidence", next_state.get("perception_confidence", 0.0)) or 0.0)
+        if str(next_state.get("selected_action", "")).strip() == "describe_scene":
+            next_state["action_result"] = "success"
+        elif proprioceptive_only:
+            verify_robot_state = runtime_deps.mcp_client.get_robot_state()
+            next_state = _record_tool_response(next_state, response=verify_robot_state)
+            if verify_robot_state.get("ok"):
+                next_state["robot_state"] = dict(verify_robot_state.get("content", {}))
+                (
+                    next_state["scene_description"],
+                    next_state["scene_observations"],
+                    next_state["perception_confidence"],
+                ) = _build_proprioceptive_scene_summary(
+                    current_task=current_task,
+                    selected_action=str(next_state.get("selected_action", "")),
+                    robot_state=next_state["robot_state"],
+                )
+            else:
+                next_state["action_result"] = "failed"
+        else:
+            verify_image_response = runtime_deps.mcp_client.get_image()
+            next_state = _record_tool_response(next_state, response=verify_image_response)
+            if verify_image_response.get("ok"):
+                next_state["current_image"] = str(verify_image_response.get("content", ""))
+
+            verify_scene_response = runtime_deps.mcp_client.describe_scene(
+                str(next_state.get("current_image", "")),
+                prompt=f"验证任务是否完成: {next_state.get('current_task', '')}",
+            )
+            next_state = _record_tool_response(next_state, response=verify_scene_response)
+            if verify_scene_response.get("ok"):
+                verify_metadata = (
+                    dict(verify_scene_response.get("metadata", {}))
+                    if isinstance(verify_scene_response.get("metadata"), dict)
+                    else {}
+                )
+                next_state["scene_description"] = str(verify_scene_response.get("content", ""))
+                next_state["scene_observations"] = dict(verify_metadata.get("structured_observations", {}))
+                next_state["perception_confidence"] = float(
+                    verify_metadata.get("confidence", next_state.get("perception_confidence", 0.0)) or 0.0
+                )
 
         last_status = str(next_state.get("action_result", "failed"))
         if last_status != "success" and next_state["iteration_count"] >= int(next_state.get("max_iterations", runtime_deps.max_iterations)):
@@ -639,6 +1168,7 @@ def verification_node(state: DecisionAgentState, deps: NodeDependencies) -> Deci
             "iteration_count": next_state["iteration_count"],
             "current_task": next_state.get("current_task", ""),
             "confidence": next_state.get("perception_confidence", 0.0),
+            "verification_mode": "proprioceptive" if proprioceptive_only else "vision",
             "message": message,
         }
         next_state["action_result"] = verification_status
@@ -941,11 +1471,23 @@ def final_status_node(state: DecisionAgentState, deps: NodeDependencies) -> Deci
         next_state = dict(normalized_state)
         next_state["action_result"] = "success" if completed else "failed"
         next_state["termination_reason"] = termination_reason
+        preserved_failure_response = str(next_state.get("assistant_response", "")).strip()
+        if not completed and termination_reason == "task_planning_failed" and preserved_failure_response:
+            next_state["assistant_response"] = preserved_failure_response
+        else:
+            next_state["assistant_response"] = _build_terminal_assistant_response(
+                current_task=str(next_state.get("current_task", "")),
+                completed=completed,
+                termination_reason=termination_reason,
+                selected_action=str(next_state.get("selected_action", "")),
+                scene_description=str(next_state.get("scene_description", "")),
+            )
         next_state["final_report"] = {
             "goal": next_state.get("goal", ""),
             "status": "completed" if completed else "failed",
             "completed": completed,
             "termination_reason": termination_reason,
+            "assistant_response": next_state["assistant_response"],
             "remaining_tasks": list(next_state.get("task_queue", [])),
             "iteration_count": int(next_state.get("iteration_count", 0)),
             "last_execution": dict(next_state.get("last_execution", {})),
@@ -976,6 +1518,7 @@ def final_status_node(state: DecisionAgentState, deps: NodeDependencies) -> Deci
                 "phase": "final_status",
                 "completed": completed,
                 "termination_reason": termination_reason,
+                "assistant_response": next_state["assistant_response"],
             },
             history_limit=runtime_deps.max_history_entries,
         )

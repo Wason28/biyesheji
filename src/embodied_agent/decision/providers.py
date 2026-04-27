@@ -11,17 +11,13 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from embodied_agent.shared.config import DecisionConfig
+from embodied_agent.shared.prompts import DECISION_PLANNING_SYSTEM_PROMPT
 
 SUPPORTED_DECISION_PROVIDERS = {"minimax", "openai", "ollama"}
 
 TransportResponse = tuple[int, dict[str, str], bytes]
 TransportCallable = Callable[[str, str, dict[str, str], bytes, float], TransportResponse]
 
-PLANNING_SYSTEM_PROMPT = (
-    "你是桌面具身智能体的任务规划器。"
-    "请只返回一个 JSON 对象，字段可以包含 task_queue、selected_capability、selected_action、selected_action_args、reason。"
-    "不要输出 markdown，不要输出解释性前缀。"
-)
 OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 MINIMAX_CHAT_COMPLETIONS_URL = "https://api.minimax.io/v1/chat/completions"
 OLLAMA_CHAT_URL = "http://127.0.0.1:11434/api/chat"
@@ -33,6 +29,7 @@ class DecisionProviderSettings:
     model: str
     api_key: str
     local_path: str
+    base_url: str
     timeout_s: float = 15.0
     max_tokens: int = 512
 
@@ -43,6 +40,7 @@ class DecisionProviderSettings:
             model=config.llm_model,
             api_key=config.llm_api_key,
             local_path=config.llm_local_path,
+            base_url=config.llm_base_url,
         )
 
 
@@ -125,6 +123,7 @@ class BaseDecisionProvider(ABC):
         return {
             "provider": self.settings.provider,
             "model": self.settings.model,
+            "base_url": self.settings.base_url,
             "local_path": self.settings.local_path,
             "auth_configured": bool(self.settings.api_key),
         }
@@ -222,21 +221,22 @@ class OpenAICompatibleDecisionProvider(BaseDecisionProvider):
         return decoded
 
     def plan(self, *, instruction: str, current_task: str, scene_description: str, scene_observations: dict[str, Any]) -> dict[str, Any]:
+        user_payload = json.dumps(
+            {
+                "instruction": instruction,
+                "current_task": current_task,
+                "scene_description": scene_description,
+                "scene_observations": scene_observations,
+            },
+            ensure_ascii=False,
+        )
         payload = {
             "model": self.settings.model,
             "messages": [
-                {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
+                {"role": "system", "content": DECISION_PLANNING_SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "instruction": instruction,
-                            "current_task": current_task,
-                            "scene_description": scene_description,
-                            "scene_observations": scene_observations,
-                        },
-                        ensure_ascii=False,
-                    ),
+                    "content": f"请基于以下输入直接输出 json：\n{user_payload}",
                 },
             ],
             "response_format": {"type": "json_object"},
@@ -263,23 +263,24 @@ class OpenAICompatibleDecisionProvider(BaseDecisionProvider):
 
 class OllamaDecisionProvider(OpenAICompatibleDecisionProvider):
     def plan(self, *, instruction: str, current_task: str, scene_description: str, scene_observations: dict[str, Any]) -> dict[str, Any]:
+        user_payload = json.dumps(
+            {
+                "instruction": instruction,
+                "current_task": current_task,
+                "scene_description": scene_description,
+                "scene_observations": scene_observations,
+            },
+            ensure_ascii=False,
+        )
         payload = {
             "model": self.settings.model,
             "stream": False,
             "format": "json",
             "messages": [
-                {"role": "system", "content": PLANNING_SYSTEM_PROMPT},
+                {"role": "system", "content": DECISION_PLANNING_SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "instruction": instruction,
-                            "current_task": current_task,
-                            "scene_description": scene_description,
-                            "scene_observations": scene_observations,
-                        },
-                        ensure_ascii=False,
-                    ),
+                    "content": f"请基于以下输入直接输出 json：\n{user_payload}",
                 },
             ],
             "options": {"num_predict": self.settings.max_tokens},
@@ -303,35 +304,47 @@ ProviderFactory = Callable[[DecisionProviderSettings], BaseDecisionProvider]
 
 
 def _build_openai_provider(settings: DecisionProviderSettings) -> BaseDecisionProvider:
-    if settings.api_key:
+    if settings.api_key or settings.base_url:
         return OpenAICompatibleDecisionProvider(
             settings,
-            endpoint=OPENAI_CHAT_COMPLETIONS_URL,
+            endpoint=_resolve_endpoint(
+                settings.base_url,
+                default_url=OPENAI_CHAT_COMPLETIONS_URL,
+                suffix="chat/completions",
+            ),
             mode="remote",
         )
-    return MockDecisionProvider(settings, fallback_reason="未配置 API Key，保留 heuristic fallback。")
+    return MockDecisionProvider(settings, fallback_reason="未配置 API Key 或自定义服务地址，保留 heuristic fallback。")
 
 
 
 def _build_minimax_provider(settings: DecisionProviderSettings) -> BaseDecisionProvider:
-    if settings.api_key:
+    if settings.api_key or settings.base_url:
         return OpenAICompatibleDecisionProvider(
             settings,
-            endpoint=MINIMAX_CHAT_COMPLETIONS_URL,
+            endpoint=_resolve_endpoint(
+                settings.base_url,
+                default_url=MINIMAX_CHAT_COMPLETIONS_URL,
+                suffix="chat/completions",
+            ),
             mode="remote",
         )
-    return MockDecisionProvider(settings, fallback_reason="未配置 API Key，保留 heuristic fallback。")
+    return MockDecisionProvider(settings, fallback_reason="未配置 API Key 或自定义服务地址，保留 heuristic fallback。")
 
 
 
 def _build_ollama_provider(settings: DecisionProviderSettings) -> BaseDecisionProvider:
-    if settings.local_path:
+    if settings.base_url or settings.local_path:
         return OllamaDecisionProvider(
             settings,
-            endpoint=OLLAMA_CHAT_URL,
+            endpoint=_resolve_endpoint(
+                settings.base_url,
+                default_url=OLLAMA_CHAT_URL,
+                suffix="api/chat",
+            ),
             mode="local",
         )
-    return MockDecisionProvider(settings, fallback_reason="未配置本地模型路径，保留 heuristic fallback。")
+    return MockDecisionProvider(settings, fallback_reason="未配置本地模型路径或服务地址，保留 heuristic fallback。")
 
 
 _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {

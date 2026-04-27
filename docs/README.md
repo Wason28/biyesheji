@@ -27,6 +27,7 @@
   - `docs/specs/07-frontend-spec.md`：第三阶段前端职责、展示边界与联调验收清单
   - `docs/specs/09-documentation-handoff.md`：文档、记录与交接规范
   - `docs/specs/11-ubuntu-runbook.md`：Ubuntu 目标环境下的最小安装、运行与验证说明
+  - `docs/specs/12-phase4-real-chain-runbook.md`：第四阶段真实链路模板、启动命令与 smoke 验收说明
 - `docs/records/`：动态记录
   - `CURRENT_STATUS.md`：当前项目状态
   - `DEVELOPMENT_LOG.md`：详细开发记录

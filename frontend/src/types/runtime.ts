@@ -1,4 +1,4 @@
-export type RunStatus = "idle" | "running" | "completed" | "failed";
+export type RunStatus = "idle" | "running" | "completed" | "failed" | "cancelled";
 export type RunPhase =
   | "trigger"
   | "nlu"
@@ -54,6 +54,7 @@ export interface DecisionConfigSection {
   api_key: string;
   api_key_configured: boolean;
   local_path: string;
+  base_url: string;
   assistant?: AssistantHint;
 }
 
@@ -64,24 +65,49 @@ export interface PerceptionConfigSection {
   api_key: string;
   api_key_configured: boolean;
   local_path: string;
+  base_url: string;
+  camera_backend?: string;
+  camera_device_id?: string;
+  camera_frame_id?: string;
+  camera_width?: number;
+  camera_height?: number;
+  camera_fps?: number;
+  camera_index?: number;
+  robot_state_backend?: string;
+  robot_state_base_url?: string;
+  robot_state_config_path?: string;
+  robot_state_base_frame?: string;
   assistant?: AssistantHint;
 }
 
 export interface ExecutionConfigSection {
   display_name: string;
   model_path: string;
+  home_joint_positions?: number[];
   home_pose: Record<string, number>;
   adapter: string;
   backend: string;
+  robot_base_url?: string;
+  robot_timeout_s?: number;
+  telemetry_poll_timeout_s?: number;
+  safety_require_precheck?: boolean;
+  robot_pythonpath?: string;
   safety_policy: string;
   stop_mode: string;
   mutable: boolean;
+}
+
+export interface CustomModelConfig {
+  id: string;
+  api: string;
+  url: string;
 }
 
 export interface FrontendSettingsSection {
   port: number;
   max_iterations: number;
   speed_scale: number;
+  custom_models: CustomModelConfig[];
 }
 
 export interface FrontendConfigPayload {
@@ -89,11 +115,14 @@ export interface FrontendConfigPayload {
   perception: PerceptionConfigSection;
   execution: ExecutionConfigSection;
   frontend: FrontendSettingsSection;
+  vision_model?: string;
 }
 
 export interface FrontendRunSnapshot {
   run_id: string;
   status: RunStatus;
+  user_instruction?: string;
+  assistant_response?: string;
   current_phase?: RunPhase;
   current_node?: string;
   current_task?: string;
@@ -129,6 +158,7 @@ export interface FrontendBootstrapPayload {
   status_fields: string[];
   execution_capabilities: Array<Record<string, unknown>>;
   execution_safety: Record<string, unknown>;
+  execution_runtime_profile?: Record<string, unknown>;
 }
 
 export interface FrontendRunStatePayload {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from embodied_agent.shared.config import PerceptionConfig as SharedPerceptionConfig
 
@@ -23,10 +23,16 @@ class PerceptionRuntimeConfig:
     camera_width: int = 640
     camera_height: int = 480
     camera_fps: float = 30.0
+    camera_index: int = 0
+    camera_backend_options: dict[str, object] = field(default_factory=dict)
     robot_state_backend: str = "mock"
     robot_state_topic: str = "/mock/robot_state"
+    robot_state_config_path: str = ""
     robot_state_base_frame: str = "base_link"
     robot_state_timeout_s: float = 1.0
+    robot_state_base_url: str = ""
+    robot_state_headers: dict[str, str] = field(default_factory=dict)
+    robot_pythonpath: str = ""
 
 
 def build_perception_runtime_config(
@@ -48,8 +54,14 @@ def build_perception_runtime_config(
         camera_width=config.camera_width,
         camera_height=config.camera_height,
         camera_fps=config.camera_fps,
+        camera_index=config.camera_index,
+        camera_backend_options=dict(config.camera_backend_options),
         robot_state_backend=config.robot_state_backend,
         robot_state_topic=config.robot_state_topic,
+        robot_state_config_path=config.robot_state_config_path,
         robot_state_base_frame=config.robot_state_base_frame,
         robot_state_timeout_s=config.robot_state_timeout_s,
+        robot_state_base_url=config.robot_state_base_url,
+        robot_state_headers=dict(config.robot_state_headers),
+        robot_pythonpath=config.robot_pythonpath,
     )

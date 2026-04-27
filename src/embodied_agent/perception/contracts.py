@@ -56,6 +56,7 @@ class RobotStateSnapshot:
     joint_positions: list[float]
     ee_pose: dict[str, Any]
     timestamp: str
+    metadata: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -63,6 +64,8 @@ class RobotStateSnapshot:
             "ee_pose": self.ee_pose,
             "timestamp": self.timestamp,
         }
+        if self.metadata:
+            payload["metadata"] = self.metadata
         validate_robot_state_payload(payload)
         return payload
 

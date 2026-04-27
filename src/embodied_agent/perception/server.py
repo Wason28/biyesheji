@@ -61,7 +61,27 @@ class PerceptionMCPServer:
         perception_config: PerceptionConfig | PerceptionRuntimeConfig | AppConfig | None,
     ) -> PerceptionRuntimeConfig:
         if isinstance(perception_config, AppConfig):
-            return build_perception_runtime_config(perception_config.perception)
+            runtime_config = build_perception_runtime_config(perception_config.perception)
+            if not runtime_config.robot_state_config_path:
+                runtime_config.robot_state_config_path = str(perception_config.execution.robot_config)
+            if not runtime_config.robot_pythonpath:
+                runtime_config.robot_pythonpath = str(perception_config.execution.robot_pythonpath)
+            
+            # 视觉模型动态路由逻辑
+            vision_model = perception_config.vision_model
+            custom_models = perception_config.frontend.custom_models
+            
+            # 如果选中的是自定义模型，则覆盖 VLM 配置
+            custom_match = next((m for m in custom_models if m.get("id") == vision_model), None)
+            if custom_match:
+                runtime_config.vlm_provider = str(custom_match.get("api", "openai"))
+                runtime_config.vlm_model = str(custom_match.get("id", ""))
+                runtime_config.vlm_base_url = str(custom_match.get("url", ""))
+            elif vision_model and vision_model != "SmolVLA-0.1B":
+                # 如果是内置的其他模型 ID，也可以在这里做映射
+                runtime_config.vlm_model = vision_model
+                
+            return runtime_config
         if isinstance(perception_config, PerceptionRuntimeConfig):
             return perception_config
         return build_perception_runtime_config(perception_config)
@@ -85,9 +105,12 @@ class PerceptionMCPServer:
             "camera_backend": self.perception_config.camera_backend,
             "camera_device_id": self.perception_config.camera_device_id,
             "camera_frame_id": self.perception_config.camera_frame_id,
+            "camera_index": self.perception_config.camera_index,
             "robot_state_backend": self.perception_config.robot_state_backend,
             "robot_state_topic": self.perception_config.robot_state_topic,
+            "robot_state_config_path": self.perception_config.robot_state_config_path,
             "robot_state_base_frame": self.perception_config.robot_state_base_frame,
+            "robot_state_base_url": self.perception_config.robot_state_base_url,
             "vlm_provider": self.perception_config.vlm_provider,
             "vlm_model": self.perception_config.vlm_model,
             "vlm_local_path": self.perception_config.vlm_local_path,

@@ -1,6 +1,15 @@
 import json
+import sys
+import time
+import types
 
-from embodied_agent.perception.adapters import build_camera_adapter, build_robot_state_adapter
+from embodied_agent.perception.adapters import (
+    BridgeRobotStateClient,
+    LeRobotRobotStateClient,
+    OpenCVCamera,
+    build_camera_adapter,
+    build_robot_state_adapter,
+)
 from embodied_agent.perception.config import PerceptionRuntimeConfig, build_perception_runtime_config
 from embodied_agent.perception.contracts import (
     SceneDescriptionRequest,
@@ -123,8 +132,12 @@ def test_build_perception_runtime_config_maps_extended_fields(app_config) -> Non
     app_config.perception.camera_width = 1280
     app_config.perception.camera_height = 720
     app_config.perception.robot_state_base_frame = "tool0"
+    app_config.perception.camera_index = 2
     app_config.perception.vlm_base_url = "http://localhost:11434"
     app_config.perception.vlm_timeout_s = 7.5
+    app_config.perception.robot_state_base_url = "http://127.0.0.1:9001"
+    app_config.perception.robot_state_config_path = "./configs/robot.yaml"
+    app_config.perception.robot_pythonpath = "/opt/lerobot/src"
 
     runtime_config = build_perception_runtime_config(app_config.perception)
 
@@ -133,9 +146,13 @@ def test_build_perception_runtime_config_maps_extended_fields(app_config) -> Non
     assert runtime_config.camera_frame_id == "wrist_camera"
     assert runtime_config.camera_width == 1280
     assert runtime_config.camera_height == 720
+    assert runtime_config.camera_index == 2
     assert runtime_config.robot_state_base_frame == "tool0"
     assert runtime_config.vlm_base_url == "http://localhost:11434"
     assert runtime_config.vlm_timeout_s == 7.5
+    assert runtime_config.robot_state_base_url == "http://127.0.0.1:9001"
+    assert runtime_config.robot_state_config_path == "./configs/robot.yaml"
+    assert runtime_config.robot_pythonpath == "/opt/lerobot/src"
 
 
 def test_perception_build_server_supports_factory_injection(app_config) -> None:
@@ -172,6 +189,205 @@ def test_build_camera_adapter_rejects_unsupported_backend() -> None:
         raise AssertionError("expected AdapterConfigurationError")
 
 
+def test_build_camera_adapter_supports_opencv_backend() -> None:
+    config = PerceptionRuntimeConfig(
+        camera_backend="opencv",
+        camera_device_id="/dev/video0",
+        camera_width=640,
+        camera_height=480,
+        camera_fps=30.0,
+    )
+
+    adapter = build_camera_adapter(config)
+
+    assert isinstance(adapter, OpenCVCamera)
+    assert adapter.camera_id == "/dev/video0"
+
+
+def test_opencv_camera_capture_returns_base64_png(monkeypatch) -> None:
+    class _FakeEncoded:
+        def tobytes(self) -> bytes:
+            return b"fake_png_bytes"
+
+    class _FakeFrame:
+        shape = (480, 640, 3)
+
+    class _FakeCapture:
+        def __init__(self, device_ref, backend_flag=None) -> None:
+            self.device_ref = device_ref
+            self.backend_flag = backend_flag
+            self.released = False
+            self.settings = {}
+
+        def isOpened(self) -> bool:
+            return True
+
+        def set(self, prop, value) -> bool:
+            self.settings[prop] = value
+            return True
+
+        def read(self):
+            return True, _FakeFrame()
+
+        def release(self) -> None:
+            self.released = True
+
+    fake_cv2 = types.SimpleNamespace(
+        CAP_V4L2=200,
+        CAP_PROP_FRAME_WIDTH=3,
+        CAP_PROP_FRAME_HEIGHT=4,
+        CAP_PROP_FPS=5,
+        VideoCapture=_FakeCapture,
+        imencode=lambda ext, frame: (True, _FakeEncoded()),
+    )
+    monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+
+    camera = OpenCVCamera(
+        camera_id="/dev/video0",
+        width=640,
+        height=480,
+        fps=30.0,
+        frame_id="camera_color_optical_frame",
+    )
+
+    captured = camera.capture()
+
+    assert captured.resolution == {"width": 640, "height": 480}
+    assert captured.camera_parameters["backend"] == "opencv"
+    assert captured.camera_parameters["camera_id"] == "/dev/video0"
+    assert captured.image_base64 == "ZmFrZV9wbmdfYnl0ZXM="
+    _, reopened = camera._open_camera()
+    assert reopened.backend_flag is None
+    reopened.release()
+
+
+def test_opencv_camera_capture_retries_after_warmup_read_failure(monkeypatch) -> None:
+    class _FakeEncoded:
+        def tobytes(self) -> bytes:
+            return b"fake_png_bytes"
+
+    class _FakeFrame:
+        shape = (480, 640, 3)
+
+        def copy(self):
+            return self
+
+    class _FakeCapture:
+        def __init__(self, device_ref, backend_flag=None) -> None:
+            del device_ref, backend_flag
+            self.read_results = [
+                (False, None),
+                (True, _FakeFrame()),
+                (True, _FakeFrame()),
+            ]
+
+        def isOpened(self) -> bool:
+            return True
+
+        def set(self, prop, value) -> bool:
+            del prop, value
+            return True
+
+        def read(self):
+            if self.read_results:
+                return self.read_results.pop(0)
+            return True, _FakeFrame()
+
+        def release(self) -> None:
+            return None
+
+    fake_cv2 = types.SimpleNamespace(
+        CAP_V4L2=200,
+        CAP_PROP_FRAME_WIDTH=3,
+        CAP_PROP_FRAME_HEIGHT=4,
+        CAP_PROP_FPS=5,
+        VideoCapture=_FakeCapture,
+        imencode=lambda ext, frame: (True, _FakeEncoded()),
+    )
+    monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+
+    camera = OpenCVCamera(
+        camera_id="/dev/video0",
+        width=640,
+        height=480,
+        fps=30.0,
+        frame_id="camera_color_optical_frame",
+    )
+    camera._WARMUP_FRAME_COUNT = 2
+    camera._READ_RETRY_COUNT = 2
+    camera._READ_RETRY_DELAY_S = 0.0
+
+    captured = camera.capture()
+
+    assert captured.resolution == {"width": 640, "height": 480}
+    assert captured.image_base64 == "ZmFrZV9wbmdfYnl0ZXM="
+
+
+def test_opencv_camera_capture_loop_reopens_after_disconnect(monkeypatch) -> None:
+    class _FakeFrame:
+        def __init__(self, marker: str) -> None:
+            self.marker = marker
+            self.shape = (480, 640, 3)
+
+        def copy(self):
+            return _FakeFrame(self.marker)
+
+    class _FakeCapture:
+        def __init__(self, reads: list[tuple[bool, _FakeFrame | None]]) -> None:
+            self.reads = list(reads)
+            self.released = False
+
+        def read(self):
+            if self.reads:
+                return self.reads.pop(0)
+            return True, _FakeFrame("steady")
+
+        def release(self) -> None:
+            self.released = True
+
+    camera = OpenCVCamera(
+        camera_id="/dev/video0",
+        width=640,
+        height=480,
+        fps=30.0,
+        frame_id="camera_color_optical_frame",
+    )
+    camera._WARMUP_FRAME_COUNT = 1
+    camera._READ_RETRY_COUNT = 1
+    camera._READ_RETRY_DELAY_S = 0.0
+    camera._OPEN_RETRY_DELAY_S = 0.0
+
+    captures = [
+        _FakeCapture([(True, _FakeFrame("first")), (False, None)]),
+        _FakeCapture([(True, _FakeFrame("second")), (True, _FakeFrame("second"))]),
+    ]
+    open_calls: list[int] = []
+
+    def _fake_open_camera():
+        open_calls.append(1)
+        if captures:
+            return None, captures.pop(0)
+        return None, _FakeCapture([(True, _FakeFrame("steady"))])
+
+    monkeypatch.setattr(camera, "_open_camera", _fake_open_camera)
+
+    camera._ensure_capture_thread()
+
+    deadline = time.time() + 1.0
+    latest_marker = None
+    while time.time() < deadline:
+        frame = camera._get_latest_frame(wait_timeout_s=0.2, allow_direct_fallback=False)
+        latest_marker = getattr(frame, "marker", None)
+        if latest_marker == "second":
+            break
+        time.sleep(0.01)
+
+    camera.close()
+
+    assert latest_marker == "second"
+    assert len(open_calls) >= 2
+
+
 
 
 def test_build_robot_state_adapter_rejects_unsupported_backend() -> None:
@@ -184,6 +400,84 @@ def test_build_robot_state_adapter_rejects_unsupported_backend() -> None:
         assert exc.details["backend"] == "ros2"
     else:
         raise AssertionError("expected AdapterConfigurationError")
+
+
+def test_build_robot_state_adapter_supports_bridge_backend() -> None:
+    config = PerceptionRuntimeConfig(
+        robot_state_backend="mcp_bridge",
+        robot_state_base_url="http://127.0.0.1:8765",
+        robot_state_base_frame="tool0",
+    )
+
+    adapter = build_robot_state_adapter(config)
+
+    assert isinstance(adapter, BridgeRobotStateClient)
+    assert adapter.base_url == "http://127.0.0.1:8765"
+
+
+def test_bridge_robot_state_client_normalizes_gateway_payload() -> None:
+    def transport(*, method: str, url: str, headers: dict[str, str], body, timeout_s: float):
+        assert method == "GET"
+        assert url == "http://127.0.0.1:8765/state"
+        response = {
+            "ok": True,
+            "robot_state": {
+                "joint_positions": [0.1, 0.2, 0.3],
+                "ee_pose": {
+                    "position": {"x": 0.4, "y": -0.1, "z": 0.2},
+                    "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                    "reference_frame": "tool0",
+                },
+                "timestamp": "2026-04-26T00:00:00+00:00",
+            },
+            "telemetry": {
+                "heartbeat_ok": True,
+                "connection_ok": True,
+                "error_code": "",
+            },
+        }
+        return 200, {"Content-Type": "application/json"}, json.dumps(response).encode("utf-8")
+
+    adapter = BridgeRobotStateClient(
+        base_url="http://127.0.0.1:8765",
+        timeout_s=1.0,
+        reference_frame="tool0",
+        transport=transport,
+    )
+
+    snapshot = adapter.read_state().to_payload()
+
+    assert snapshot["joint_positions"] == [0.1, 0.2, 0.3]
+    assert snapshot["ee_pose"]["reference_frame"] == "tool0"
+    assert snapshot["metadata"]["backend"] == "mcp_bridge"
+    assert snapshot["metadata"]["heartbeat_ok"] is True
+
+
+def test_lerobot_robot_state_client_uses_loader_and_observation_fallback() -> None:
+    class _FakeRobot:
+        def get_observation(self):
+            return {
+                "joint_1.pos": 0.1,
+                "joint_2.pos": -0.2,
+                "gripper.pos": 30.0,
+                "ee.x": 0.2,
+                "ee.y": 0.0,
+                "ee.z": 0.1,
+            }
+
+    adapter = LeRobotRobotStateClient(
+        config_path="./robot.yaml",
+        pythonpath="/opt/lerobot/src",
+        reference_frame="base_link",
+        loader=lambda config_path, pythonpath: _FakeRobot(),
+    )
+
+    snapshot = adapter.read_state().to_payload()
+
+    assert snapshot["joint_positions"][:2] == [0.1, -0.2]
+    assert snapshot["ee_pose"]["position"]["x"] == 0.2
+    assert snapshot["metadata"]["backend"] == "lerobot_local"
+    assert snapshot["metadata"]["gripper_state"] == 30.0
 
 
 def test_perception_server_success_envelope_includes_runtime_summary(app_config) -> None:
@@ -416,7 +710,49 @@ def test_openai_compatible_provider_maps_auth_failure() -> None:
         assert exc.code == "PERCEPTION_VLM_AUTHENTICATION_FAILURE"
     else:
         raise AssertionError("expected VLMAuthenticationError")
+def test_openai_compatible_provider_falls_back_to_plain_text_scene_description() -> None:
+    captured: dict[str, object] = {}
 
+    def transport(method: str, url: str, headers: dict[str, str], body: bytes, timeout_s: float):
+        captured["body"] = json.loads(body.decode("utf-8"))
+        response_body = json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "画面里有一台机械臂，桌面上有一个方块，当前没有明显碰撞风险。"
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "model": "mimo-v2-omni",
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return 200, {"Content-Type": "application/json"}, response_body
+
+    provider = OpenAICompatibleVisionProvider(
+        ProviderSettings(
+            provider="openai_gpt4o",
+            model="mimo-v2-omni",
+            api_key="secret",
+            local_path="",
+            base_url="",
+            timeout_s=8.0,
+            max_retries=2,
+            max_tokens=256,
+        ),
+        endpoint="https://example.com/v1/chat/completions",
+        transport=transport,
+    )
+
+    result = provider.describe_scene(SceneDescriptionRequest(image="ZmFrZV9pbWFnZQ==", prompt="分析场景"))
+
+    assert result.scene_description.startswith("画面里有一台机械臂")
+    assert result.provider_metadata["parsed_mode"] == "text_fallback"
+    assert result.structured_observations["objects"] == []
+    assert result.confidence == 0.6
+    assert "response_format" not in captured["body"]
 
 
 def test_ollama_provider_maps_service_unavailable() -> None:

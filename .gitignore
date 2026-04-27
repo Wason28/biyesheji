@@ -19,3 +19,16 @@ frontend/node_modules/
 frontend/*.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
+
+# Local secrets / runtime overrides
+.env.local
+.env.*.local
+config/local*.yaml
+lerobot_configs/*.local.yaml
+
+# Local artifacts / generated outputs
+backend_error.log
+=4.10.0
+docs.zip
+data/
+outputs/

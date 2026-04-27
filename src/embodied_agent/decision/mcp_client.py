@@ -151,6 +151,7 @@ class MinimalMCPClient:
         self.register_tool("move_home", self._mock_execution_result("move_home"))
         self.register_tool("move_to", self._mock_execution_result("move_to"))
         self.register_tool("grasp", self._mock_execution_result("grasp"))
+        self.register_tool("servo_rotate", self._mock_execution_result("servo_rotate"))
         self.register_tool("release", self._mock_execution_result("release"))
 
     @staticmethod

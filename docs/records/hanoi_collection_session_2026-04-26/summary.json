@@ -1,0 +1,46 @@
+{
+  "generated_at": "2026-04-26T17:09:53.978061+00:00",
+  "session_dir": "docs/records/hanoi_collection_session_2026-04-26",
+  "dataset_repo_id": "local/hanoi_ring_atomic_20260426_235041",
+  "dataset_root": "data/lerobot",
+  "dataset_dir": "data/lerobot/local/hanoi_ring_atomic_20260426_235041",
+  "camera_device_id": "/dev/video0",
+  "robot_backend": "lerobot_local",
+  "robot_state_config_path": "lerobot_configs/so101_follower.local.yaml",
+  "robot_state_base_url": "",
+  "episodes_total": 90,
+  "episodes_completed": 90,
+  "interrupted": false,
+  "checks": [
+    {
+      "name": "camera",
+      "ok": true,
+      "message": "camera device ready: /dev/video0",
+      "details": {
+        "camera_device_id": "/dev/video0",
+        "camera_index": 0,
+        "note": "full validation is performed when the LeRobot recording runtime connects the robot cameras"
+      }
+    },
+    {
+      "name": "follower",
+      "ok": true,
+      "message": "follower ready",
+      "details": {
+        "port": "/dev/ttyACM0",
+        "id": "hanoi_follower_arm_v2",
+        "payload_size": 6
+      }
+    },
+    {
+      "name": "leader",
+      "ok": true,
+      "message": "leader ready",
+      "details": {
+        "port": "/dev/ttyACM1",
+        "id": "hanoi_leader_arm_v2",
+        "payload_size": 6
+      }
+    }
+  ]
+}

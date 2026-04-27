@@ -34,6 +34,8 @@ class RunSession:
     events: list[RunEvent] = field(default_factory=list)
     terminal: bool = False
     terminal_at: float | None = None
+    stop_requested: bool = False
+    stop_reason: str = ""
     worker: Thread | None = None
     condition: Condition = field(default_factory=lambda: Condition(RLock()))
 
@@ -71,6 +73,24 @@ class RunRegistry:
         session = self.get_session(run_id)
         with session.condition:
             session.worker = worker
+
+    def request_stop(self, run_id: str, *, reason: str) -> RunSession:
+        session = self.get_session(run_id)
+        with session.condition:
+            session.stop_requested = True
+            session.stop_reason = reason
+            session.condition.notify_all()
+        return session
+
+    def is_stop_requested(self, run_id: str) -> bool:
+        session = self.get_session(run_id)
+        with session.condition:
+            return bool(session.stop_requested)
+
+    def stop_reason(self, run_id: str) -> str:
+        session = self.get_session(run_id)
+        with session.condition:
+            return session.stop_reason
 
     def publish(
         self,

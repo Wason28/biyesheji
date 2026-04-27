@@ -109,3 +109,10 @@ export function startRun(instruction: string, runId?: string) {
     }),
   });
 }
+
+export function stopRun(snapshotUrl: string) {
+  const stopPath = snapshotUrl.replace(/\/$/, "").concat("/stop");
+  return requestJSON<FrontendRunStatePayload>(stopPath, {
+    method: "POST",
+  });
+}

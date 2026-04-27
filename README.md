@@ -18,7 +18,7 @@
 - `src/embodied_agent/`：Python 后端、决策/感知/执行与统一入口
 - `frontend/`：基于 `React 19 + TypeScript + Vite + Tailwind CSS v4 + Zustand + lucide-react` 的前端工作台
 - `docs/`：实现规范、状态记录、交接与论文材料导航
-- `config/`：示例配置
+- `config/`：示例配置与 phase4 真实链路模板
 - `tests/`：当前 pytest 测试集
 
 ## 后端快速开始
@@ -46,6 +46,13 @@ python -m embodied_agent.app --instruction "抓取桌面方块" --list-tools
 - `POST /api/v1/runtime/runs`
 - `GET /api/v1/runtime/runs/{run_id}`
 - `GET /api/v1/runtime/runs/{run_id}/events`
+
+## Phase4 真实链路入口
+
+- 桥接模式模板：`config/phase4_real_opencv_mcp_bridge.example.yaml`
+- 本地 LeRobot 模板：`config/phase4_real_opencv_lerobot_local.example.yaml`
+- 冒烟脚本：`scripts/phase4_p0_real_smoke.py`
+- 联调说明：`docs/specs/12-phase4-real-chain-runbook.md`
 
 ## 前后端联调启动
 

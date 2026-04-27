@@ -11,6 +11,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from embodied_agent.shared.config import PerceptionConfig
+from embodied_agent.shared.prompts import (
+    PERCEPTION_DEFAULT_SCENE_PROMPT,
+    PERCEPTION_VISION_RESPONSE_SYSTEM_PROMPT,
+)
 
 from .config import PerceptionRuntimeConfig
 from .contracts import SceneDescriptionRequest, SceneDescriptionResult
@@ -21,6 +25,9 @@ from .errors import (
     VLMResponseFormatError,
     VLMServiceUnavailableError,
 )
+
+# Backward-compatible export kept for package-level imports.
+DEFAULT_SCENE_PROMPT = PERCEPTION_DEFAULT_SCENE_PROMPT
 
 SUPPORTED_VLM_PROVIDERS = {
     "minimax_mcp_vision",
@@ -38,17 +45,10 @@ ProviderFactory = Callable[["ProviderSettings"], "BaseVLMProvider"]
 TransportResponse = tuple[int, dict[str, str], bytes]
 TransportCallable = Callable[[str, str, dict[str, str], bytes, float], TransportResponse]
 
-DEFAULT_SCENE_PROMPT = (
-    "请稳定输出桌面场景描述，覆盖物体类别、相对位置、遮挡关系、抓取状态与安全风险。"
-)
-VISION_RESPONSE_INSTRUCTIONS = (
-    "你是桌面具身智能系统的视觉感知模块。"
-    "请只返回一个 JSON 对象，字段必须包含 scene_description、confidence、structured_observations。"
-    "structured_observations 必须包含 objects、relations、robot_grasp_state、risk_flags。"
-)
 OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 MINIMAX_CHAT_COMPLETIONS_URL = "https://api.minimax.io/v1/chat/completions"
 OLLAMA_CHAT_URL = "http://127.0.0.1:11434/api/chat"
+ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 
 
 @dataclass(slots=True)
@@ -124,7 +124,15 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError as exc:
-        raise VLMResponseFormatError(message="VLM 返回内容不是合法 JSON") from exc
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                payload = json.loads(candidate[start : end + 1])
+            except json.JSONDecodeError:
+                raise VLMResponseFormatError(message="VLM 返回内容不是合法 JSON") from exc
+        else:
+            raise VLMResponseFormatError(message="VLM 返回内容不是合法 JSON") from exc
     if not isinstance(payload, dict):
         raise VLMResponseFormatError(message="VLM 返回内容必须为 JSON 对象")
     return payload
@@ -202,6 +210,22 @@ def _normalize_scene_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "confidence": _normalize_confidence(payload.get("confidence")),
         "structured_observations": _normalize_structured_observations(payload.get("structured_observations")),
     }
+
+
+def _normalize_scene_payload_from_text(text: str) -> dict[str, Any]:
+    scene_description = text.strip()
+    if not scene_description:
+        raise VLMResponseFormatError(message="VLM 返回缺少 scene_description")
+    return {
+        "scene_description": scene_description,
+        "confidence": 0.6,
+        "structured_observations": _normalize_structured_observations({}),
+    }
+
+
+def _supports_json_object_response_format(model_name: str) -> bool:
+    normalized = model_name.strip().lower()
+    return normalized.startswith("gpt") or normalized.startswith("cc-gpt")
 
 
 def _decode_json_body(body: bytes) -> dict[str, Any]:
@@ -296,7 +320,7 @@ class MockVLMProvider(BaseVLMProvider):
         if self.fail_on_inference:
             raise VLMServiceUnavailableError(provider=self.provider_name, model=self.model_name)
 
-        prompt_used = request.prompt or DEFAULT_SCENE_PROMPT
+        prompt_used = request.prompt or PERCEPTION_DEFAULT_SCENE_PROMPT
         description = (
             "桌面中央存在一个可抓取的小方块，位于机械臂末端前方偏左；"
             "右后方有空置区域；当前未检测到夹爪闭合抓取，环境无遮挡。"
@@ -427,15 +451,16 @@ class OpenAICompatibleVisionProvider(HTTPVLMProvider):
         return headers
 
     def describe_scene(self, request: SceneDescriptionRequest) -> SceneDescriptionResult:
-        prompt_used = request.prompt or DEFAULT_SCENE_PROMPT
+        prompt_used = request.prompt or PERCEPTION_DEFAULT_SCENE_PROMPT
+        prompt_text = f"{prompt_used}\n请直接输出 json。"
         payload = {
             "model": self.model_name,
             "messages": [
-                {"role": "system", "content": VISION_RESPONSE_INSTRUCTIONS},
+                {"role": "system", "content": PERCEPTION_VISION_RESPONSE_SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": prompt_used},
+                        {"type": "text", "text": prompt_text},
                         {
                             "type": "image_url",
                             "image_url": {"url": f"data:image/png;base64,{request.image}"},
@@ -443,9 +468,10 @@ class OpenAICompatibleVisionProvider(HTTPVLMProvider):
                     ],
                 },
             ],
-            "response_format": {"type": "json_object"},
             "max_tokens": self.settings.max_tokens,
         }
+        if _supports_json_object_response_format(self.model_name):
+            payload["response_format"] = {"type": "json_object"}
         response_payload = self._request_json(payload, headers=self._authorization_headers())
         choices = response_payload.get("choices")
         if not isinstance(choices, list) or not choices:
@@ -459,7 +485,12 @@ class OpenAICompatibleVisionProvider(HTTPVLMProvider):
         content_text = _extract_text_content(message.get("content"))
         if not content_text:
             raise VLMResponseFormatError(message="VLM 返回缺少可解析内容")
-        normalized = _normalize_scene_payload(_extract_json_object(content_text))
+        try:
+            normalized = _normalize_scene_payload(_extract_json_object(content_text))
+            parsed_mode = "json_object"
+        except VLMResponseFormatError:
+            normalized = _normalize_scene_payload_from_text(content_text)
+            parsed_mode = "text_fallback"
         metadata = self.config_summary()
         usage = response_payload.get("usage")
         if isinstance(usage, dict):
@@ -469,6 +500,84 @@ class OpenAICompatibleVisionProvider(HTTPVLMProvider):
         response_model = response_payload.get("model")
         if isinstance(response_model, str) and response_model.strip():
             metadata["response_model"] = response_model.strip()
+        metadata["parsed_mode"] = parsed_mode
+
+        return SceneDescriptionResult(
+            scene_description=normalized["scene_description"],
+            provider=self.provider_name,
+            model=self.model_name,
+            confidence=normalized["confidence"],
+            prompt_used=prompt_used,
+            structured_observations=normalized["structured_observations"],
+            provider_metadata=metadata,
+        )
+
+
+class AnthropicCompatibleVisionProvider(HTTPVLMProvider):
+    def __init__(
+        self,
+        settings: ProviderSettings,
+        *,
+        endpoint: str,
+        provider_mode: str = "remote",
+        transport: TransportCallable = _default_transport,
+    ) -> None:
+        super().__init__(settings, endpoint=endpoint, mode=provider_mode, transport=transport)
+
+    def _authorization_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {
+            "anthropic-version": "2023-06-01",
+        }
+        if self.settings.api_key:
+            headers["x-api-key"] = self.settings.api_key
+        return headers
+
+    def describe_scene(self, request: SceneDescriptionRequest) -> SceneDescriptionResult:
+        prompt_used = request.prompt or PERCEPTION_DEFAULT_SCENE_PROMPT
+        payload = {
+            "model": self.model_name,
+            "max_tokens": self.settings.max_tokens,
+            "system": PERCEPTION_VISION_RESPONSE_SYSTEM_PROMPT,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": request.image,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": f"{prompt_used}\n请直接输出 json。",
+                        },
+                    ],
+                }
+            ],
+        }
+        response_payload = self._request_json(payload, headers=self._authorization_headers())
+        content = response_payload.get("content")
+        content_text = _extract_text_content(content)
+        if not content_text:
+            raise VLMResponseFormatError(message="VLM 返回缺少可解析内容")
+        try:
+            normalized = _normalize_scene_payload(_extract_json_object(content_text))
+            parsed_mode = "json_object"
+        except VLMResponseFormatError:
+            normalized = _normalize_scene_payload_from_text(content_text)
+            parsed_mode = "text_fallback"
+        metadata = self.config_summary()
+        if isinstance(response_payload.get("usage"), dict):
+            metadata["usage"] = dict(response_payload["usage"])
+        if isinstance(response_payload.get("stop_reason"), str):
+            metadata["finish_reason"] = str(response_payload["stop_reason"])
+        response_model = response_payload.get("model")
+        if isinstance(response_model, str) and response_model.strip():
+            metadata["response_model"] = response_model.strip()
+        metadata["parsed_mode"] = parsed_mode
 
         return SceneDescriptionResult(
             scene_description=normalized["scene_description"],
@@ -492,7 +601,7 @@ class OllamaVisionProvider(HTTPVLMProvider):
         super().__init__(settings, endpoint=endpoint, mode="local", transport=transport)
 
     def describe_scene(self, request: SceneDescriptionRequest) -> SceneDescriptionResult:
-        prompt_used = request.prompt or DEFAULT_SCENE_PROMPT
+        prompt_used = request.prompt or PERCEPTION_DEFAULT_SCENE_PROMPT
         payload = {
             "model": self.model_name,
             "stream": False,
@@ -500,7 +609,7 @@ class OllamaVisionProvider(HTTPVLMProvider):
             "messages": [
                 {
                     "role": "system",
-                    "content": VISION_RESPONSE_INSTRUCTIONS,
+                    "content": PERCEPTION_VISION_RESPONSE_SYSTEM_PROMPT,
                 },
                 {
                     "role": "user",
@@ -543,6 +652,14 @@ class OllamaVisionProvider(HTTPVLMProvider):
 
 def _build_minimax_provider(settings: ProviderSettings) -> BaseVLMProvider:
     if settings.api_key or settings.base_url:
+        normalized_base_url = settings.base_url.strip().lower()
+        if normalized_base_url.endswith("/anthropic") or "/anthropic/" in normalized_base_url:
+            endpoint = _resolve_endpoint(
+                settings.base_url,
+                default_url=ANTHROPIC_MESSAGES_URL,
+                suffix="v1/messages",
+            )
+            return AnthropicCompatibleVisionProvider(settings, endpoint=endpoint, provider_mode="remote")
         endpoint = _resolve_endpoint(
             settings.base_url,
             default_url=MINIMAX_CHAT_COMPLETIONS_URL,

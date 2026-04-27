@@ -1,4 +1,7 @@
+import { useState } from "react";
+
 import { PanelShell } from "./panel-shell";
+import { resolveRuntimeUrl } from "../lib/api";
 import { useWorkbenchStore } from "../store/workbench";
 
 function prettyJson(value: unknown) {
@@ -56,12 +59,66 @@ function renderRobotStateSummary(robotState: Record<string, unknown> | undefined
   ];
 }
 
+function resolveRuntimeProfileCardData(
+  bootstrap: Record<string, unknown> | null,
+  config: Record<string, unknown> | null,
+) {
+  const runtimeProfile =
+    bootstrap && typeof bootstrap.execution_runtime_profile === "object"
+      ? (bootstrap.execution_runtime_profile as Record<string, unknown>)
+      : {};
+  const adapterProfile =
+    runtimeProfile.adapter && typeof runtimeProfile.adapter === "object"
+      ? (runtimeProfile.adapter as Record<string, unknown>)
+      : {};
+  const connection =
+    adapterProfile.connection && typeof adapterProfile.connection === "object"
+      ? (adapterProfile.connection as Record<string, unknown>)
+      : {};
+  const perception =
+    config && typeof config.perception === "object" ? (config.perception as Record<string, unknown>) : {};
+  const execution =
+    config && typeof config.execution === "object" ? (config.execution as Record<string, unknown>) : {};
+
+  return [
+    {
+      label: "相机后端",
+      value: String(perception.camera_backend || "unknown"),
+    },
+    {
+      label: "状态后端",
+      value: String(perception.robot_state_backend || "unknown"),
+    },
+    {
+      label: "执行适配器",
+      value: String(execution.adapter || adapterProfile.name || "unknown"),
+    },
+    {
+      label: "连接模式",
+      value: String(connection.mode || "unknown"),
+    },
+    {
+      label: "桥接地址",
+      value: String(execution.robot_base_url || perception.robot_state_base_url || "--"),
+    },
+    {
+      label: "Precheck",
+      value: execution.safety_require_precheck === false ? "disabled" : "enabled",
+    },
+  ];
+}
+
 export function RuntimePanel() {
+  const [videoStreamFailed, setVideoStreamFailed] = useState(false);
+  const bootstrap = useWorkbenchStore((state) => state.bootstrap);
+  const config = useWorkbenchStore((state) => state.configDraft || state.config || state.bootstrap?.config || null);
   const snapshot = useWorkbenchStore((state) => state.snapshot);
   const showRuntimeDetails = useWorkbenchStore((state) => state.showRuntimeDetails);
   const toggleRuntimeDetails = useWorkbenchStore((state) => state.toggleRuntimeDetails);
   const imageSource = resolveImageSource(snapshot?.current_image);
+  const videoStreamUrl = `${resolveRuntimeUrl("/api/v1/runtime/video-stream")}?fps=12&width=320&height=240&quality=50`;
   const telemetryItems = renderRobotStateSummary(snapshot?.robot_state);
+  const runtimeProfileItems = resolveRuntimeProfileCardData(bootstrap as Record<string, unknown> | null, config as Record<string, unknown> | null);
 
   return (
     <PanelShell
@@ -78,15 +135,22 @@ export function RuntimePanel() {
         <div className="video-frame">
           <div className="video-frame__badge">
             <span className="video-frame__dot" />
-            {imageSource ? "LIVE · SNAPSHOT" : "WAITING · SNAPSHOT"}
+            {!videoStreamFailed ? "LIVE · STREAM" : imageSource ? "LIVE · SNAPSHOT" : "WAITING · STREAM"}
           </div>
           <div className="video-frame__body">
-            {imageSource ? (
+            {!videoStreamFailed ? (
+              <img
+                className="runtime-image runtime-image--frame"
+                src={videoStreamUrl}
+                alt="当前运行态视频流"
+                onError={() => setVideoStreamFailed(true)}
+              />
+            ) : imageSource ? (
               <img className="runtime-image runtime-image--frame" src={imageSource} alt="当前运行态图像" />
             ) : (
               <div className="video-empty-state">
-                <strong>等待图像输入</strong>
-                <p>当前还没有真实视频流服务，页面会优先展示最近一次 `current_image` 快照。</p>
+                <strong>等待视频流输入</strong>
+                <p>当前未拿到视频流，页面才会回退到最近一次 `current_image` 快照。</p>
               </div>
             )}
           </div>
@@ -142,10 +206,29 @@ export function RuntimePanel() {
               <strong>{snapshot?.error || "无"}</strong>
             </div>
           </div>
+
+          <div className="telemetry-list">
+            {runtimeProfileItems.map((item) => (
+              <div className="telemetry-item" key={item.label}>
+                <span>{item.label}</span>
+                <div>
+                  <strong>{item.value}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {showRuntimeDetails ? (
           <div className="runtime-details-grid">
+            <div className="info-block">
+              <h3>execution_runtime_profile</h3>
+              <pre className="code-block compact-code-block">{prettyJson(bootstrap?.execution_runtime_profile)}</pre>
+            </div>
+            <div className="info-block">
+              <h3>execution_safety</h3>
+              <pre className="code-block compact-code-block">{prettyJson(bootstrap?.execution_safety)}</pre>
+            </div>
             <div className="info-block">
               <h3>robot_state</h3>
               <pre className="code-block compact-code-block">{prettyJson(snapshot?.robot_state)}</pre>

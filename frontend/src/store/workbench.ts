@@ -9,6 +9,7 @@ import {
   RuntimeRequestError,
   runtimeBaseUrl,
   startRun,
+  stopRun as requestStopRun,
   updateConfig,
 } from "../lib/api";
 import { createRuntimeEventSource } from "../lib/sse";
@@ -26,6 +27,7 @@ import type {
 type AsyncStatus = "idle" | "loading" | "ready" | "error";
 type StreamStatus = "idle" | "connecting" | "live" | "closed" | "error";
 type ThemeMode = "dark" | "light";
+type EditableConfigSectionKey = Exclude<ConfigSectionKey, "vision_model">;
 
 const runtimeEventNames: RuntimeEventName[] = [
   "snapshot",
@@ -56,7 +58,7 @@ interface WorkbenchState {
   toolsNotice: string;
   configNotice: string;
   lastRunSummary: string;
-  activeConfigTab: ConfigSectionKey;
+  activeConfigTab: EditableConfigSectionKey | "custom_models";
   bootstrap: FrontendBootstrapPayload | null;
   config: FrontendConfigPayload | null;
   configDraft: FrontendConfigPayload | null;
@@ -72,21 +74,24 @@ interface WorkbenchState {
   saveConfigDraft: () => Promise<void>;
   resetConfigDraft: () => void;
   submitRun: () => Promise<void>;
+  stopRun: () => Promise<void>;
   syncRunSnapshot: () => Promise<void>;
   setInstruction: (value: string) => void;
   setRequestedRunId: (value: string) => void;
   updateConfigDraft: (
-    section: ConfigSectionKey,
+    section: EditableConfigSectionKey | "root",
     field: string,
-    value: string | number,
+    value: string | number | boolean,
   ) => void;
+  addCustomModel: (model: { id: string; api: string; url: string }) => void;
+  removeCustomModel: (modelId: string) => void;
   updateHomePoseDraft: (axis: string, value: number) => void;
   setThemeMode: (mode: ThemeMode) => void;
   toggleRuntimeDetails: () => void;
   toggleToolSchemas: () => void;
   toggleModelAssistants: () => void;
   clearInstruction: () => void;
-  setActiveConfigTab: (tab: ConfigSectionKey) => void;
+  setActiveConfigTab: (tab: EditableConfigSectionKey | "custom_models") => void;
   disconnectStream: () => void;
 }
 
@@ -112,12 +117,75 @@ function upsertRunEvent(
 }
 
 function cloneConfig(config: FrontendConfigPayload | null) {
-  return config ? JSON.parse(JSON.stringify(config)) as FrontendConfigPayload : null;
+  if (!config) return null;
+  const cloned = JSON.parse(JSON.stringify(config)) as FrontendConfigPayload;
+  if (cloned.frontend && !cloned.frontend.custom_models) {
+    cloned.frontend.custom_models = [];
+  }
+  if (!cloned.vision_model) {
+    cloned.vision_model = "SmolVLA-0.1B";
+  }
+  return cloned;
 }
 
 function describeRuntimeEvent(payload: FrontendRunStatePayload) {
   return `${payload.phase} / ${payload.event}`;
 }
+
+const DEFAULT_EMPTY_CONFIG: FrontendConfigPayload = {
+  decision: {
+    provider: "openai",
+    model: "gpt-4o",
+    provider_options: ["openai", "anthropic", "google", "local"],
+    api_key: "",
+    api_key_configured: false,
+    local_path: "",
+    base_url: "",
+  },
+  perception: {
+    provider: "openai",
+    model: "gpt-4o",
+    provider_options: ["openai", "anthropic", "google", "local"],
+    api_key: "",
+    api_key_configured: false,
+    local_path: "",
+    base_url: "",
+    camera_backend: "mock",
+    camera_device_id: "mock_camera_rgb_01",
+    camera_frame_id: "camera_color_optical_frame",
+    camera_width: 640,
+    camera_height: 480,
+    camera_fps: 30,
+    camera_index: 0,
+    robot_state_backend: "mock",
+    robot_state_base_url: "",
+    robot_state_config_path: "",
+    robot_state_base_frame: "base_link",
+  },
+  execution: {
+    display_name: "SmolVLA",
+    model_path: "",
+    home_joint_positions: [0, 0, 0, 0, 0, 0],
+    home_pose: { x: 0, y: 0, z: 0 },
+    adapter: "lerobot",
+    backend: "pycore",
+    robot_base_url: "",
+    robot_timeout_s: 2,
+    telemetry_poll_timeout_s: 1,
+    safety_require_precheck: true,
+    robot_pythonpath: "",
+    safety_policy: "strict",
+    stop_mode: "immediate",
+    mutable: false,
+  },
+  frontend: {
+    port: 8000,
+    max_iterations: 10,
+    speed_scale: 1.0,
+    custom_models: [],
+  },
+  vision_model: "SmolVLA-0.1B",
+};
 
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   runtimeBaseUrl,
@@ -163,6 +231,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         getConfig(),
         getTools(),
       ]);
+
       set({
         bootstrap,
         config,
@@ -185,6 +254,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         toolsStatus: "error",
         latestError: message,
         latestErrorCode: error instanceof RuntimeRequestError ? error.code : "BootstrapLoadFailed",
+        configDraft: cloneConfig(DEFAULT_EMPTY_CONFIG),
       });
     }
   },
@@ -368,6 +438,40 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       });
     }
   },
+  async stopRun() {
+    const accepted = get().runAccepted;
+    if (!accepted?.snapshot_url) {
+      set({
+        latestError: "当前没有可结束的运行任务。",
+        latestErrorCode: "NoActiveRun",
+      });
+      return;
+    }
+
+    try {
+      const payload = await requestStopRun(accepted.snapshot_url);
+      closeEventSource(get().eventSource);
+      set((state) => ({
+        snapshot: payload.run,
+        latestRunState: payload,
+        eventFeed: upsertRunEvent(state.eventFeed, payload),
+        eventSource: null,
+        streamStatus: "closed",
+        streamNotice: "当前 run 已手动结束。",
+        lastRunSummary: `最近一次 run 已手动结束（${describeRuntimeEvent(payload)} / v${payload.version}）。`,
+        latestError: "",
+        latestErrorCode: "",
+        runStatus: "ready",
+      }));
+    } catch (error) {
+      const message =
+        error instanceof RuntimeRequestError ? error.message : "结束 run 失败";
+      set({
+        latestError: message,
+        latestErrorCode: error instanceof RuntimeRequestError ? error.code : "RunStopFailed",
+      });
+    }
+  },
   async syncRunSnapshot() {
     const accepted = get().runAccepted;
     if (!accepted?.snapshot_url) {
@@ -410,12 +514,53 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       if (!state.configDraft) {
         return {};
       }
+      if (section === "root") {
+        return {
+          configDraft: {
+            ...state.configDraft,
+            [field]: value,
+          },
+          configDraftStatus: "idle",
+        };
+      }
       return {
         configDraft: {
           ...state.configDraft,
           [section]: {
             ...state.configDraft[section],
             [field]: value,
+          },
+        },
+        configDraftStatus: "idle",
+      };
+    });
+  },
+  addCustomModel(model) {
+    set((state) => {
+      if (!state.configDraft) return {};
+      const currentModels = state.configDraft.frontend.custom_models || [];
+      return {
+        configDraft: {
+          ...state.configDraft,
+          frontend: {
+            ...state.configDraft.frontend,
+            custom_models: [...currentModels, model],
+          },
+        },
+        configDraftStatus: "idle",
+      };
+    });
+  },
+  removeCustomModel(modelId) {
+    set((state) => {
+      if (!state.configDraft) return {};
+      const currentModels = state.configDraft.frontend.custom_models || [];
+      return {
+        configDraft: {
+          ...state.configDraft,
+          frontend: {
+            ...state.configDraft.frontend,
+            custom_models: currentModels.filter((m) => m.id !== modelId),
           },
         },
         configDraftStatus: "idle",

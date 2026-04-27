@@ -14,6 +14,7 @@
 - 测试前端工作台对 `bootstrap / config / tools / runs / snapshot / events` 的真实消费路径、设置弹窗、控制面板与事件日志
 - 验证前端工程 `npm --prefix frontend run build` 可通过
 - 验证前端 Playwright smoke / e2e 可通过
+- 验证 phase4 真实链路模板、真实链路 smoke 脚本与 mock backend 冒烟入口保持可用
 
 本阶段明确不测：
 - 不测 MCP 执行、真实机械臂抓取、真实视频流或实体分拣闭环
@@ -51,6 +52,7 @@
 | `tests/test_backend_run_stream_phase3.py` | 集成 / stream | 6/6 通过 | 通过 |
 | `frontend/tests/e2e/workbench-smoke.spec.ts` | 浏览器 e2e | 3/3 通过 | 通过 |
 | `frontend` 构建 | 构建门禁 | 通过 | 通过 |
+| `config/phase4_real_opencv_*.example.yaml` + `scripts/phase4_p0_real_smoke.py` | phase4 配置 / smoke | 通过 | 通过 |
 
 ## 本轮执行命令与结果
 
@@ -75,17 +77,37 @@
   - 设置弹窗中的配置刷新、工具刷新、助手显示与配置保存
   - 控制面板空指令本地校验
 
+- 命令：`PYTHONPATH=src ../.venv/bin/python -m pytest tests/test_app_phase1.py -q`
+- 结果：通过
+- 汇总：`18 passed in 0.25s`
+- 说明：新增验证两份 phase4 真实链路模板可被 `build_runtime_from_config` 正确加载，并校验 `opencv + mcp_bridge` / `opencv + lerobot_local` 装配结果
+
+- 命令：`PYTHONPATH=src ../.venv/bin/python scripts/phase4_p0_real_smoke.py --help`
+- 结果：通过
+- 说明：确认 phase4 真实链路 smoke 脚本命令行入口可用
+
+- 命令：`PYTHONPATH=src ../.venv/bin/python -m embodied_agent.backend.http --host 127.0.0.1 --port 7866`
+- 结果：通过
+- 说明：用于 phase4 smoke 的 mock backend 验证
+
+- 命令：`PYTHONPATH=src ../.venv/bin/python scripts/phase4_p0_real_smoke.py --base-url http://127.0.0.1:7866/api/v1/runtime --run-id run-p0-real-smoke-mock`
+- 结果：通过
+- 汇总：退出码 `0`
+- 说明：确认 `bootstrap / config / tools / video-stream / runs / events` 组成的 phase4 smoke 检查链路可在 mock backend 下完整跑通；该结果只证明脚本与接口合同可用，不代表真实硬件已验收
+
 ## 当前风险与缺口
 
 - 当前自动化验证仍以本地软件级 demo 为边界，不覆盖 MCP 执行、真实硬件与真实视频流
 - 当前 HTTP / SSE 传输仍为同步 WSGI + 进程内线程模型，未覆盖生产级并发与持久化恢复
 - 前端 e2e 目前聚焦 smoke 与关键交互，尚未覆盖更长链路的失败态与断流恢复
 - Ubuntu 实机、真实 provider 凭据与长时间运行留痕仍待后续验收
+- phase4 真实链路模板与 smoke 目前只完成配置级、接口级与 mock backend 验证，尚未形成真实硬件留痕
 
 ## 当前结论
 
 - 当前项目已经具备“本地软件级 embodied-agent demo”的自动化验证基础：后端 focused pytest、前端构建和浏览器 e2e 均已通过
 - 当前测试结果支持这样的表述：前端工作台、后端运行时、真实模型接入层与工程化测试已经补齐到可本地运行、可观测、可回归的状态
+- 当前测试结果也支持这样的补充表述：phase4 真实链路模板、接口级 smoke 脚本和联调 runbook 已经落地，并已通过 mock backend 验证
 - 当前测试结果不支持把项目表述为：MCP 执行完成、真实机械臂闭环完成、真实视频流完成或生产级流式服务完成
 
 ## 当前阶段测试范围

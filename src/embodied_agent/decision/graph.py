@@ -40,6 +40,12 @@ def _route_after_assessment(state: DecisionAgentState) -> str:
     return "task_planning"
 
 
+def _route_after_task_planning(state: DecisionAgentState) -> str:
+    if str(state.get("termination_reason", "")) == "task_planning_failed":
+        return "final_status"
+    return "pre_feedback"
+
+
 def _route_after_verification(state: DecisionAgentState) -> str:
     retry_context = state.get("retry_context", {})
     if isinstance(retry_context, dict) and retry_context.get("exhausted"):
@@ -98,7 +104,14 @@ def build_decision_graph(deps: NodeDependencies) -> Any:
         },
     )
     graph_builder.add_edge("active_perception", "sensory")
-    graph_builder.add_edge("task_planning", "pre_feedback")
+    graph_builder.add_conditional_edges(
+        "task_planning",
+        _route_after_task_planning,
+        {
+            "pre_feedback": "pre_feedback",
+            "final_status": "final_status",
+        },
+    )
     graph_builder.add_edge("pre_feedback", "motion_control")
     graph_builder.add_edge("motion_control", "verification")
     graph_builder.add_conditional_edges(

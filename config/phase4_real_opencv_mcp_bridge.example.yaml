@@ -1,0 +1,59 @@
+decision:
+  llm_provider: openai
+  llm_model: "${EMBODIED_AGENT_LLM_FALLBACK_MODEL}"
+  llm_api_key: "${EMBODIED_AGENT_LLM_FALLBACK_API_KEY}"
+  llm_local_path: ""
+  llm_base_url: "${EMBODIED_AGENT_LLM_FALLBACK_BASE_URL}"
+  max_iterations: 6
+
+perception:
+  vlm_provider: openai_gpt4o
+  vlm_model: "${EMBODIED_AGENT_VLM_MODEL}"
+  vlm_api_key: "${EMBODIED_AGENT_VLM_API_KEY}"
+  vlm_local_path: ""
+  vlm_base_url: "${EMBODIED_AGENT_VLM_BASE_URL}"
+  vlm_timeout_s: 20.0
+  vlm_max_retries: 2
+  vlm_max_tokens: 512
+  camera_backend: opencv
+  camera_device_id: "${EMBODIED_AGENT_CAMERA_DEVICE_ID}"
+  camera_frame_id: "${EMBODIED_AGENT_CAMERA_FRAME_ID}"
+  camera_width: 640
+  camera_height: 480
+  camera_fps: 15.0
+  camera_index: 0
+  robot_state_backend: mcp_bridge
+  robot_state_topic: /bridge/robot_state
+  robot_state_config_path: ""
+  robot_state_base_frame: base_link
+  robot_state_timeout_s: 1.5
+  robot_state_base_url: "${EMBODIED_AGENT_ROBOT_BRIDGE_BASE_URL}"
+  robot_state_headers: {}
+  robot_pythonpath: ""
+
+execution:
+  vla_model_path: ./models/smolvla_finetuned
+  robot_config: ./lerobot_configs/my_robot.yaml
+  robot_adapter: mcp_bridge
+  smolvla_backend: mock_smolvla
+  robot_base_url: "${EMBODIED_AGENT_ROBOT_BRIDGE_BASE_URL}"
+  robot_headers: {}
+  robot_timeout_s: 2.0
+  telemetry_poll_timeout_s: 1.0
+  safety_require_precheck: true
+  robot_pythonpath: ""
+  safety_policy: fail_closed
+  stop_mode: estop_latched
+  workspace_limits:
+    x: [-0.5, 0.5]
+    y: [-0.5, 0.5]
+    z: [0.0, 0.8]
+  home_pose:
+    x: 0.0
+    y: 0.0
+    z: 0.4
+
+frontend:
+  port: 7864
+  max_iterations: 6
+  speed_scale: 1.0

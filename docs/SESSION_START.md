@@ -24,5 +24,6 @@
 2. 先读对应 `docs/specs/`
 3. 若是前端任务，优先看 `frontend/src/App.tsx`、`frontend/src/store/workbench.ts`、`frontend/src/components/config-panel.tsx`、`frontend/src/components/control-panel.tsx`、`frontend/src/components/event-panel.tsx`、`frontend/src/lib/api.ts`、`frontend/src/lib/sse.ts`、`frontend/vite.config.ts`
 4. 若是后端联调任务，优先看 `src/embodied_agent/backend/http.py`、`service.py`、`run_registry.py`、`package.json`、`scripts/dev.js`
-5. 开工前确认本轮要更新哪些 `docs/records/`
-6. 完成后补状态、记录和交接
+5. 若是 phase4 真实链路任务，优先看 `docs/specs/12-phase4-real-chain-runbook.md`、`config/phase4_real_opencv_mcp_bridge.example.yaml`、`config/phase4_real_opencv_lerobot_local.example.yaml`、`scripts/phase4_p0_real_smoke.py`
+6. 开工前确认本轮要更新哪些 `docs/records/`
+7. 完成后补状态、记录和交接

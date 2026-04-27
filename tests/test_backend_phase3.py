@@ -129,6 +129,23 @@ def test_backend_http_invalid_instruction_returns_error_payload(app_config) -> N
     assert payload["error"]["code"] == "InvalidInstruction"
 
 
+def test_backend_http_video_stream_route_returns_mjpeg_frame(app_config) -> None:
+    runtime = build_runtime(app_config)
+    app = build_http_app_from_runtime(runtime)
+
+    status, headers, body = _request(
+        app,
+        "GET",
+        "/api/v1/runtime/video-stream",
+        query="frame_limit=1&fps=30",
+    )
+
+    assert status.startswith("200")
+    assert headers["Content-Type"].startswith("multipart/x-mixed-replace")
+    assert b"Content-Type: image/" in body
+    assert b"--frame" in body
+
+
 def test_backend_http_put_config_updates_runtime_view(app_config) -> None:
     runtime = build_runtime(app_config)
     app = build_http_app_from_runtime(runtime)
@@ -143,16 +160,35 @@ def test_backend_http_put_config_updates_runtime_view(app_config) -> None:
                 "model": "gpt-4o-mini",
                 "api_key": "decision-secret",
                 "local_path": "/models/decision",
+                "base_url": "https://llm.example.com/v1",
             },
             "perception": {
                 "provider": "openai_gpt4o",
                 "model": "gpt-4o",
                 "api_key": "perception-secret",
                 "local_path": "/models/perception",
+                "base_url": "https://vlm.example.com/v1",
+                "camera_backend": "opencv",
+                "camera_device_id": "/dev/video2",
+                "camera_frame_id": "wrist_camera",
+                "camera_width": 1280,
+                "camera_height": 720,
+                "camera_fps": 15.0,
+                "camera_index": 2,
+                "robot_state_backend": "mcp_bridge",
+                "robot_state_base_url": "http://127.0.0.1:8765",
+                "robot_state_config_path": "./configs/robot.yaml",
+                "robot_state_base_frame": "tool0",
             },
             "execution": {
                 "model_path": "./models/smolvla_updated",
                 "home_pose": {"x": 0.1, "y": 0.2, "z": 0.3},
+                "adapter": "mcp_bridge",
+                "robot_base_url": "http://127.0.0.1:9901",
+                "robot_timeout_s": 3.0,
+                "telemetry_poll_timeout_s": 1.5,
+                "safety_require_precheck": True,
+                "robot_pythonpath": "/opt/lerobot/src",
             },
             "frontend": {"max_iterations": 6, "speed_scale": 0.6, "port": 9000},
         },
@@ -165,12 +201,24 @@ def test_backend_http_put_config_updates_runtime_view(app_config) -> None:
     assert payload["decision"]["api_key"] == ""
     assert payload["decision"]["api_key_configured"] is True
     assert payload["decision"]["local_path"] == "/models/decision"
+    assert payload["decision"]["base_url"] == "https://llm.example.com/v1"
     assert payload["perception"]["provider"] == "openai_gpt4o"
     assert payload["perception"]["model"] == "gpt-4o"
     assert payload["perception"]["api_key"] == ""
     assert payload["perception"]["api_key_configured"] is True
+    assert payload["perception"]["base_url"] == "https://vlm.example.com/v1"
+    assert payload["perception"]["camera_backend"] == "opencv"
+    assert payload["perception"]["camera_device_id"] == "/dev/video2"
+    assert payload["perception"]["camera_index"] == 2
+    assert payload["perception"]["robot_state_backend"] == "mcp_bridge"
+    assert payload["perception"]["robot_state_base_url"] == "http://127.0.0.1:8765"
     assert payload["execution"]["model_path"] == "./models/smolvla_updated"
     assert payload["execution"]["home_pose"] == {"x": 0.1, "y": 0.2, "z": 0.3}
+    assert payload["execution"]["adapter"] == "mcp_bridge"
+    assert payload["execution"]["robot_base_url"] == "http://127.0.0.1:9901"
+    assert payload["execution"]["robot_timeout_s"] == 3.0
+    assert payload["execution"]["telemetry_poll_timeout_s"] == 1.5
+    assert payload["execution"]["safety_require_precheck"] is True
     assert payload["frontend"]["max_iterations"] == 6
     assert payload["frontend"]["speed_scale"] == 0.6
     assert payload["frontend"]["port"] == 9000
@@ -206,6 +254,22 @@ def test_backend_bootstrap_config_marks_perception_provider_configured_when_remo
     assert perception_assistant["status"] == "configured"
     assert perception_assistant["detected_models"][0]["configured"] is True
     assert perception_assistant["detected_models"][0]["provider"] == "openai_gpt4o"
+
+
+def test_backend_bootstrap_config_marks_decision_provider_configured_when_base_url_ready(app_config) -> None:
+    app_config.decision.llm_provider = "openai"
+    app_config.decision.llm_base_url = "https://llm.example.com/v1"
+    runtime = build_runtime(app_config)
+    app = build_http_app_from_runtime(runtime)
+
+    status, _, body = _request(app, "GET", "/api/v1/runtime/bootstrap")
+    payload = json.loads(body.decode("utf-8"))
+    decision_assistant = payload["config"]["decision"]["assistant"]
+
+    assert status.startswith("200")
+    assert payload["config"]["decision"]["base_url"] == "https://llm.example.com/v1"
+    assert decision_assistant["status"] == "configured"
+    assert "https://llm.example.com/v1" in decision_assistant["message"]
 
 
 def test_backend_http_events_support_last_event_id_and_after_version(app_config) -> None:

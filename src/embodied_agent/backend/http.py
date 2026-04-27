@@ -26,6 +26,10 @@ SSE_HEADERS = [
     ("Content-Type", "text/event-stream; charset=utf-8"),
     ("Cache-Control", "no-cache"),
 ]
+MJPEG_HEADERS = [
+    ("Content-Type", "multipart/x-mixed-replace; boundary=frame"),
+    ("Cache-Control", "no-cache"),
+]
 DEFAULT_HTTP_HOST = os.environ.get("EMBODIED_AGENT_HTTP_HOST", "127.0.0.1")
 DEFAULT_HTTP_PORT = int(os.environ.get("EMBODIED_AGENT_HTTP_PORT", "7860"))
 ALLOWED_ORIGIN = os.environ.get("EMBODIED_AGENT_ALLOWED_ORIGIN", "")
@@ -61,6 +65,13 @@ class BackendHTTPApp:
             if method == "PUT" and path == "/api/v1/runtime/config":
                 payload = self._read_json_body(environ)
                 return self._respond(start_response, 200, self.facade.update_config(payload), origin=origin)
+            if method == "GET" and path == "/api/v1/runtime/video-stream":
+                stream_params = self._extract_video_stream_params(environ)
+                return self._respond_stream(
+                    start_response,
+                    self.facade.iter_video_stream(**stream_params),
+                    origin=origin,
+                )
             if method == "POST" and path == "/api/v1/runtime/run":
                 payload = self._read_json_body(environ)
                 instruction = self._extract_instruction(payload)
@@ -79,6 +90,14 @@ class BackendHTTPApp:
                     start_response,
                     202,
                     self.facade.start_run(instruction=instruction, run_id=run_id),
+                    origin=origin,
+                )
+            run_id = self._match_run_stop_path(path)
+            if method == "POST" and run_id is not None:
+                return self._respond(
+                    start_response,
+                    200,
+                    self.facade.stop_run(run_id=run_id),
                     origin=origin,
                 )
             run_id = self._match_run_snapshot_path(path)
@@ -206,6 +225,17 @@ class BackendHTTPApp:
         return [body]
 
     @staticmethod
+    def _respond_stream(
+        start_response: StartResponse,
+        chunks: Any,
+        *,
+        origin: str | None = None,
+    ) -> Any:
+        headers = [*MJPEG_HEADERS, *BackendHTTPApp._cors_headers(origin)]
+        start_response("200 OK", headers)
+        return chunks
+
+    @staticmethod
     def _respond_empty(
         start_response: StartResponse,
         status_code: int,
@@ -263,6 +293,13 @@ class BackendHTTPApp:
         return None
 
     @staticmethod
+    def _match_run_stop_path(path: str) -> str | None:
+        parts = path.strip("/").split("/")
+        if len(parts) == 6 and parts[:4] == ["api", "v1", "runtime", "runs"] and parts[4] and parts[5] == "stop":
+            return parts[4]
+        return None
+
+    @staticmethod
     def _extract_after_version(environ: WSGIEnvironment) -> int:
         last_event_id = str(environ.get("HTTP_LAST_EVENT_ID", "")).strip()
         if last_event_id:
@@ -279,7 +316,7 @@ class BackendHTTPApp:
                     status_code=400,
                     code="InvalidLastEventId",
                     message="Last-Event-ID 必须是非负整数",
-                )
+            )
             return value
         query = parse_qs(str(environ.get("QUERY_STRING", "")))
         after_version = query.get("after_version", ["0"])[0]
@@ -298,6 +335,22 @@ class BackendHTTPApp:
                 message="after_version 必须是非负整数",
             )
         return value
+
+    @staticmethod
+    def _extract_video_stream_params(environ: WSGIEnvironment) -> dict[str, Any]:
+        query = parse_qs(str(environ.get("QUERY_STRING", "")))
+        fps = float(query.get("fps", ["0"])[0] or 0)
+        frame_limit_raw = query.get("frame_limit", [None])[0]
+        width_raw = query.get("width", [None])[0]
+        height_raw = query.get("height", [None])[0]
+        quality_raw = query.get("quality", [None])[0]
+        return {
+            "fps": fps if fps > 0 else None,
+            "frame_limit": int(frame_limit_raw) if frame_limit_raw else None,
+            "width": int(width_raw) if width_raw else None,
+            "height": int(height_raw) if height_raw else None,
+            "quality": int(quality_raw) if quality_raw else None,
+        }
 
     @staticmethod
     def _status_text(status_code: int) -> str:
@@ -325,14 +378,18 @@ def build_http_app_from_config(config_path: str | Path) -> BackendHTTPApp:
     return build_http_app_from_runtime(build_runtime_from_config(config_path))
 
 
+from socketserver import ThreadingMixIn
+
+class ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
+    daemon_threads = True
+
 def serve_http_app(
     app: WSGIApplication,
     *,
     host: str = DEFAULT_HTTP_HOST,
     port: int = DEFAULT_HTTP_PORT,
-    server_factory: Callable[..., WSGIServer] = make_server,
 ) -> WSGIServer:
-    return server_factory(host, port, app)
+    return make_server(host, port, app, server_class=ThreadingWSGIServer)
 
 
 def _build_parser() -> argparse.ArgumentParser:

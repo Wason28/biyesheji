@@ -6,7 +6,7 @@ from typing import Any, Literal, TypedDict
 
 
 ActionStatus = Literal["success", "in_progress", "failed"]
-RunStatus = Literal["idle", "running", "completed", "failed"]
+RunStatus = Literal["idle", "running", "completed", "failed", "cancelled"]
 RunPhase = Literal[
     "trigger",
     "nlu",
@@ -93,16 +93,19 @@ class FrontendToolDescriptor(TypedDict, total=False):
     capability_names: list[str]
 
 
-class FrontendConfigPayload(TypedDict):
+class FrontendConfigPayload(TypedDict, total=False):
     decision: dict[str, Any]
     perception: dict[str, Any]
     execution: dict[str, Any]
     frontend: dict[str, Any]
+    vision_model: str
 
 
 class FrontendRunSnapshot(TypedDict, total=False):
     run_id: str
     status: RunStatus
+    user_instruction: str
+    assistant_response: str
     current_phase: RunPhase
     current_node: str
     current_task: str
@@ -138,6 +141,7 @@ class FrontendBootstrapPayload(TypedDict):
     status_fields: list[str]
     execution_capabilities: list[dict[str, Any]]
     execution_safety: dict[str, Any]
+    execution_runtime_profile: dict[str, Any]
 
 
 class FrontendRuntimeAPI(TypedDict):
@@ -174,6 +178,7 @@ class AgentState(TypedDict):
     user_instruction: str
     task_queue: list[str]
     current_task: str
+    assistant_response: str
     current_image: str
     robot_state: RobotState
     scene_description: str

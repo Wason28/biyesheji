@@ -1,0 +1,60 @@
+decision:
+  llm_provider: openai
+  llm_model: "${EMBODIED_AGENT_LLM_FALLBACK_MODEL}"
+  llm_api_key: "${EMBODIED_AGENT_LLM_FALLBACK_API_KEY}"
+  llm_local_path: ""
+  llm_base_url: "${EMBODIED_AGENT_LLM_FALLBACK_BASE_URL}"
+  max_iterations: 6
+
+perception:
+  vlm_provider: minimax_mcp_vision
+  vlm_model: "${EMBODIED_AGENT_VLM_MODEL}"
+  vlm_api_key: "${EMBODIED_AGENT_VLM_API_KEY}"
+  vlm_local_path: ""
+  vlm_base_url: "${EMBODIED_AGENT_VLM_BASE_URL}"
+  vlm_timeout_s: 30.0
+  vlm_max_retries: 2
+  vlm_max_tokens: 1024
+  camera_backend: opencv
+  camera_device_id: "${EMBODIED_AGENT_CAMERA_DEVICE_ID}"
+  camera_frame_id: "${EMBODIED_AGENT_CAMERA_FRAME_ID}"
+  camera_width: 640
+  camera_height: 480
+  camera_fps: 15.0
+  camera_index: 0
+  robot_state_backend: lerobot_local
+  robot_state_topic: /local/robot_state
+  robot_state_config_path: "${EMBODIED_AGENT_LEROBOT_CONFIG_PATH}"
+  robot_state_base_frame: base_link
+  robot_state_timeout_s: 1.5
+  robot_state_base_url: ""
+  robot_state_headers: {}
+  robot_pythonpath: "${EMBODIED_AGENT_LEROBOT_PYTHONPATH}"
+
+execution:
+  vla_model_path: "${EMBODIED_AGENT_SMOLVLA_MODEL_PATH}"
+  robot_config: "${EMBODIED_AGENT_LEROBOT_CONFIG_PATH}"
+  robot_adapter: lerobot_local
+  smolvla_backend: lerobot_smolvla
+  robot_base_url: ""
+  robot_headers: {}
+  robot_timeout_s: 2.0
+  telemetry_poll_timeout_s: 1.0
+  safety_require_precheck: true
+  robot_pythonpath: "${EMBODIED_AGENT_LEROBOT_PYTHONPATH}"
+  safety_policy: fail_closed
+  stop_mode: estop_latched
+  workspace_limits:
+    x: [-0.5, 0.5]
+    y: [-0.5, 0.5]
+    z: [0.0, 0.8]
+  home_joint_positions: [0.6593406593406593, -94.5934065934066, 94.81318681318682, 65.27472527472527, -91.47252747252747, 39.70944309927361]
+  home_pose:
+    x: 0.0
+    y: 0.0
+    z: 0.4
+
+frontend:
+  port: 7864
+  max_iterations: 6
+  speed_scale: 1.0

@@ -24,7 +24,9 @@ class MockMCPServer:
         self.register_tool(self._build_tool_definition("move_to"), self._runtime.move_to)
         self.register_tool(self._build_tool_definition("move_home"), self._runtime.move_home)
         self.register_tool(self._build_tool_definition("grasp"), self._runtime.grasp)
+        self.register_tool(self._build_tool_definition("servo_rotate"), self._runtime.servo_rotate)
         self.register_tool(self._build_tool_definition("release"), self._runtime.release)
+        self.register_tool(self._build_tool_definition("clear_emergency_stop"), self._runtime.clear_emergency_stop)
         self.register_tool(self._build_tool_definition("run_smolvla"), self._runtime.run_smolvla)
 
     def _build_tool_definition(self, tool_name: ToolName) -> ToolDefinition:

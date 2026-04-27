@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,7 @@ class DecisionConfig:
     llm_model: str = "MiniMax-M2.1"
     llm_api_key: str = ""
     llm_local_path: str = ""
+    llm_base_url: str = ""
     max_iterations: int = 10
 
 
@@ -34,10 +37,16 @@ class PerceptionConfig:
     camera_width: int = 640
     camera_height: int = 480
     camera_fps: float = 30.0
+    camera_index: int = 0
+    camera_backend_options: dict[str, Any] = field(default_factory=dict)
     robot_state_backend: str = "mock"
     robot_state_topic: str = "/mock/robot_state"
+    robot_state_config_path: str = ""
     robot_state_base_frame: str = "base_link"
     robot_state_timeout_s: float = 1.0
+    robot_state_base_url: str = ""
+    robot_state_headers: dict[str, str] = field(default_factory=dict)
+    robot_pythonpath: str = ""
 
 
 @dataclass(slots=True)
@@ -46,6 +55,12 @@ class ExecutionConfig:
     robot_config: str = "./lerobot_configs/my_robot.yaml"
     robot_adapter: str = "mock_lerobot"
     smolvla_backend: str = "mock_smolvla"
+    robot_base_url: str = ""
+    robot_headers: dict[str, str] = field(default_factory=dict)
+    robot_timeout_s: float = 2.0
+    telemetry_poll_timeout_s: float = 1.0
+    safety_require_precheck: bool = True
+    robot_pythonpath: str = ""
     safety_policy: str = "fail_closed"
     stop_mode: str = "estop_latched"
     workspace_limits: dict[str, list[float]] = field(
@@ -55,6 +70,7 @@ class ExecutionConfig:
             "z": [0.0, 0.8],
         }
     )
+    home_joint_positions: list[float] = field(default_factory=lambda: [0.0] * 6)
     home_pose: dict[str, float] = field(
         default_factory=lambda: {
             "x": 0.0,
@@ -69,6 +85,7 @@ class FrontendConfig:
     port: int = 7860
     max_iterations: int = 10
     speed_scale: float = 1.0
+    custom_models: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -77,6 +94,7 @@ class AppConfig:
     perception: PerceptionConfig = field(default_factory=PerceptionConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     frontend: FrontendConfig = field(default_factory=FrontendConfig)
+    vision_model: str = "SmolVLA-0.1B"
 
 
 def _merge_dataclass(dataclass_type: type[Any], values: dict[str, Any] | None) -> Any:
@@ -84,10 +102,21 @@ def _merge_dataclass(dataclass_type: type[Any], values: dict[str, Any] | None) -
     return dataclass_type(**values)
 
 
+def _expand_env_values(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _expand_env_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_values(item) for item in value]
+    if isinstance(value, str):
+        expanded = os.path.expandvars(value)
+        return re.sub(r"\$\{[^}]+\}", "", expanded)
+    return value
+
+
 def load_config(config_path: str | Path) -> AppConfig:
     """Load runtime configuration from YAML."""
     path = Path(config_path)
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    raw = _expand_env_values(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
     return AppConfig(
         decision=_merge_dataclass(DecisionConfig, raw.get("decision")),
         perception=_merge_dataclass(PerceptionConfig, raw.get("perception")),

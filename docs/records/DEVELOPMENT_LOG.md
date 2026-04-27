@@ -4,6 +4,26 @@
 
 每条记录至少包含：日期、负责 Agent、对应里程碑、修改模块、修改内容、对应需求点、风险和遗留问题、下一步建议、对应论文章节。
 
+### 2026-04-26
+
+- 负责 Agent：Implementation / Documentation Agent
+- 对应里程碑：phase4 真实链路模板、smoke 与联调 runbook 收口
+- 修改模块：`config/config.example.yaml` / `config/phase4_real_opencv_mcp_bridge.example.yaml` / `config/phase4_real_opencv_lerobot_local.example.yaml` / `scripts/phase4_p0_real_smoke.py` / `tests/test_app_phase1.py` / `docs/specs/12-phase4-real-chain-runbook.md` / `docs/README.md` / `README.md` / `docs/records/CURRENT_STATUS.md` / `docs/records/HANDOFF.md` / `docs/records/TEST_REPORT.md` / `docs/records/DEVELOPMENT_LOG.md`
+- 修改内容：在此前真实链路 P0 配置字段、前端配置面板和运行时 profile 已经落地的基础上，继续把“可执行入口”补齐：一方面新增 `phase4_real_opencv_mcp_bridge.example.yaml` 与 `phase4_real_opencv_lerobot_local.example.yaml` 两份真实链路模板，并把 `config.example.yaml` 扩到最新字段集合；另一方面新增 `scripts/phase4_p0_real_smoke.py`，统一检查 `bootstrap / config / tools / video-stream / runs / events` 是否可用，并把检查结果落盘到 `docs/records/phase4_p0_real_smoke_result_*.json`。随后在 `tests/test_app_phase1.py` 中新增参数化回归，锁住两份 phase4 模板的 YAML 加载与后端类型装配；最后补写 `docs/specs/12-phase4-real-chain-runbook.md`，给出 `opencv + mcp_bridge`、`opencv + lerobot_local` 两条联调路径的环境变量、启动命令、smoke 命令、通过标准与故障排查顺序，并同步更新 README、docs 导航、状态、交接与测试报告，确保这批 phase4 入口不会只存在于代码里而缺少执行说明
+- 对应需求点：用户要求继续推进开发，在前后端支持真实链路配置之后，继续向下补齐真实设备联调说明、启动命令清单和可执行的 smoke 验收路径；因此本轮重点不是继续扩接口，而是把现有 phase4 接入骨架变成可启动、可验证、可交接的仓库内标准入口
+- 风险和遗留问题：本轮只完成模板、脚本、测试和文档收口；真实摄像头、真实 bridge、真实 `lerobot_local` 依赖以及物理机械臂动作尚未实机验证；验证中使用的 `phase4_p0_real_smoke.py` mock backend 实跑，只能证明脚本与接口合同稳定，不代表真实硬件链路已通过
+- 下一步建议：按 `docs/specs/12-phase4-real-chain-runbook.md` 至少完成一次真实设备 smoke，优先选择 `mcp_bridge` 或 `lerobot_local` 中更容易先打通的一条路线，并在完成后把 smoke 结果 JSON、截图和异常记录同步到 `TEST_REPORT.md` 与 `CURRENT_STATUS.md`
+- 对应论文章节：系统实现与验证、执行层真实接入设计、工程化与交接规范、实验准备与验收流程
+
+- 负责 Agent：Documentation Maintainer
+- 对应里程碑：真实硬件与 MCP 扩展待办清单重构
+- 修改模块：`docs/records/HARDWARE_INTEGRATION_TODOS.md` / `docs/records/CURRENT_STATUS.md` / `docs/records/HANDOFF.md` / `docs/records/DEVELOPMENT_LOG.md`
+- 修改内容：按“优先更新现有待办文档并增加清晰分组”的要求，重写 `HARDWARE_INTEGRATION_TODOS.md`，先基于现有感知工具 `get_image / get_robot_state / describe_scene` 与执行工具 `move_to / move_home / grasp / release / servo_rotate / run_smolvla` 明确当前基线，再把建议后续扩展的 MCP 工具按 `P0 真实链路打通`、`P1 感知与定位增强`、`P1 VLA 执行增强`、`P2 数据闭环与运维能力` 四组重排，并逐项补齐工具职责、模块归属、优先级和推荐实现顺序；同时同步更新 `CURRENT_STATUS.md` 与 `HANDOFF.md`，避免交接时仍沿用旧的“按模块罗列但缺少优先级”的待办口径
+- 对应需求点：用户要求把建议后续扩展的 MCP 工具直接写入项目里的 todo 相关 md，优先更新现有待办文档，并明确工具职责与优先级；因此本轮以现有硬件待办文档为主承载面，而不是新建分散文档
+- 风险和遗留问题：本轮仅更新文档，不新增代码、测试或真实硬件接线；P0/P1/P2 优先级依据当前系统架构与现有 contract 推导，后续仍需结合真实设备选型、驱动可用性和答辩场景调整；MCP transport、相机型号和 LeRobot 目标设备仍未冻结
+- 下一步建议：后续承接真实链路任务时，优先按文档中的第一批 P0 顺序推进 `stream_camera_frame`、`get_robot_telemetry`、`dispatch_lerobot_action` 与 `safety_precheck`，并在首次真实联调完成后补 `TEST_REPORT.md` 与验收记录
+- 对应论文章节：系统架构设计、感知层设计、动作执行层设计、工程化与交接规范
+
 ### 2026-04-24
 
 - 负责 Agent：Implementation / QA / Documentation Agent
