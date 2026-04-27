@@ -31,4 +31,9 @@ backend_error.log
 =4.10.0
 docs.zip
 data/
-outputs/
+outputs/*
+!outputs/records/
+!outputs/records/**
+!outputs/reports/
+!outputs/reports/**
+outputs/train/

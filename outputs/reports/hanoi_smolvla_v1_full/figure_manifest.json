@@ -1,0 +1,27 @@
+[
+  {
+    "file": "/home/liuwenjie/lerobot/biyesheji/biyesheji/outputs/reports/hanoi_smolvla_v1_full/loss_vs_step.svg",
+    "title": "SmolVLA Training Loss vs Step",
+    "caption": "训练损失随步数下降，反映策略在示教数据上的拟合过程。"
+  },
+  {
+    "file": "/home/liuwenjie/lerobot/biyesheji/biyesheji/outputs/reports/hanoi_smolvla_v1_full/grad_norm_vs_step.svg",
+    "title": "Gradient Norm vs Step",
+    "caption": "梯度范数曲线用于观察优化过程是否平稳，是否出现梯度爆炸或异常抖动。"
+  },
+  {
+    "file": "/home/liuwenjie/lerobot/biyesheji/biyesheji/outputs/reports/hanoi_smolvla_v1_full/learning_rate_vs_step.svg",
+    "title": "Learning Rate vs Step",
+    "caption": "学习率衰减曲线，对应本次训练使用的 cosine decay with warmup 调度策略。"
+  },
+  {
+    "file": "/home/liuwenjie/lerobot/biyesheji/biyesheji/outputs/reports/hanoi_smolvla_v1_full/timing_vs_step.svg",
+    "title": "Training Timing vs Step",
+    "caption": "展示每步参数更新耗时和数据加载耗时，可用于分析训练吞吐和 I/O 开销。"
+  },
+  {
+    "file": "/home/liuwenjie/lerobot/biyesheji/biyesheji/outputs/reports/hanoi_smolvla_v1_full/action_quantiles.svg",
+    "title": "Dataset Action Quantiles by Joint",
+    "caption": "展示各关节动作在数据集中的 q10 / q50 / q90 分位值，用于说明示教动作分布。"
+  }
+]

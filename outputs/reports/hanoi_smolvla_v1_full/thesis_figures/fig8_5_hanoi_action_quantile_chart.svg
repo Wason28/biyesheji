@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+<style>
+.title { font: 700 22px sans-serif; fill: #1f2937; }
+.axis { font: 12px sans-serif; fill: #4b5563; }
+.legend { font: 13px sans-serif; fill: #374151; }
+.small { font: 11px sans-serif; fill: #6b7280; }
+</style>
+<rect x="0" y="0" width="1200" height="720" fill="#ffffff"/>
+<text x="100" y="42" class="title">Dataset Action Quantiles by Joint</text>
+<rect x="100" y="80" width="960" height="520" fill="#f8fafc" stroke="#cbd5e1"/>
+<line x1="100" y1="355.60" x2="1060" y2="355.60" stroke="#9ca3af"/>
+<line x1="100" y1="600.00" x2="1060" y2="600.00" stroke="#e5e7eb"/>
+<text x="88" y="604.00" text-anchor="end" class="axis">-106</text>
+<line x1="100" y1="496.00" x2="1060" y2="496.00" stroke="#e5e7eb"/>
+<text x="88" y="500.00" text-anchor="end" class="axis">-60.9</text>
+<line x1="100" y1="392.00" x2="1060" y2="392.00" stroke="#e5e7eb"/>
+<text x="88" y="396.00" text-anchor="end" class="axis">-15.8</text>
+<line x1="100" y1="288.00" x2="1060" y2="288.00" stroke="#e5e7eb"/>
+<text x="88" y="292.00" text-anchor="end" class="axis">29.3</text>
+<line x1="100" y1="184.00" x2="1060" y2="184.00" stroke="#e5e7eb"/>
+<text x="88" y="188.00" text-anchor="end" class="axis">74.5</text>
+<line x1="100" y1="80.00" x2="1060" y2="80.00" stroke="#e5e7eb"/>
+<text x="88" y="84.00" text-anchor="end" class="axis">120</text>
+<text x="180.00" y="624" text-anchor="middle" class="axis">shoulder_pan</text>
+<rect x="120.00" y="355.60" width="32.00" height="51.99" fill="#2563eb"/>
+<rect x="160.00" y="355.60" width="32.00" height="9.62" fill="#059669"/>
+<rect x="200.00" y="327.74" width="32.00" height="27.86" fill="#dc2626"/>
+<text x="340.00" y="624" text-anchor="middle" class="axis">shoulder_lift</text>
+<rect x="280.00" y="355.60" width="32.00" height="218.15" fill="#2563eb"/>
+<rect x="320.00" y="355.60" width="32.00" height="21.81" fill="#059669"/>
+<rect x="360.00" y="262.12" width="32.00" height="93.48" fill="#dc2626"/>
+<text x="500.00" y="624" text-anchor="middle" class="axis">elbow_flex</text>
+<rect x="440.00" y="355.60" width="32.00" height="46.30" fill="#2563eb"/>
+<rect x="480.00" y="312.02" width="32.00" height="43.58" fill="#059669"/>
+<rect x="520.00" y="188.34" width="32.00" height="167.26" fill="#dc2626"/>
+<text x="660.00" y="624" text-anchor="middle" class="axis">wrist_flex</text>
+<rect x="600.00" y="190.36" width="32.00" height="165.24" fill="#2563eb"/>
+<rect x="640.00" y="150.60" width="32.00" height="205.00" fill="#059669"/>
+<rect x="680.00" y="126.43" width="32.00" height="229.17" fill="#dc2626"/>
+<text x="820.00" y="624" text-anchor="middle" class="axis">wrist_roll</text>
+<rect x="760.00" y="355.60" width="32.00" height="235.11" fill="#2563eb"/>
+<rect x="800.00" y="355.60" width="32.00" height="216.72" fill="#059669"/>
+<rect x="840.00" y="355.60" width="32.00" height="188.60" fill="#dc2626"/>
+<text x="980.00" y="624" text-anchor="middle" class="axis">gripper</text>
+<rect x="920.00" y="342.65" width="32.00" height="12.95" fill="#2563eb"/>
+<rect x="960.00" y="283.35" width="32.00" height="72.25" fill="#059669"/>
+<rect x="1000.00" y="174.11" width="32.00" height="181.49" fill="#dc2626"/>
+<text x="24" y="340.00" text-anchor="middle" class="axis" transform="rotate(-90 24 340.00)">Action Value</text>
+<rect x="100" y="46" width="18" height="8" fill="#2563eb"/>
+<text x="126" y="54" class="legend">q10</text>
+<rect x="260" y="46" width="18" height="8" fill="#059669"/>
+<text x="286" y="54" class="legend">median</text>
+<rect x="420" y="46" width="18" height="8" fill="#dc2626"/>
+<text x="446" y="54" class="legend">q90</text>
+<text x="100" y="712" class="small">stats=stats.json</text>
+</svg>

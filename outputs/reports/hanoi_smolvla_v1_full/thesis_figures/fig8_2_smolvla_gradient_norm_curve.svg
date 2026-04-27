@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+<style>
+.title { font: 700 22px sans-serif; fill: #1f2937; }
+.axis { font: 12px sans-serif; fill: #4b5563; }
+.legend { font: 13px sans-serif; fill: #374151; }
+.small { font: 11px sans-serif; fill: #6b7280; }
+</style>
+<rect x="0" y="0" width="1200" height="720" fill="#ffffff"/>
+<text x="90" y="42" class="title">Gradient Norm vs Step</text>
+<rect x="90" y="80" width="980" height="520" fill="#f8fafc" stroke="#cbd5e1"/>
+<line x1="90.00" y1="80" x2="90.00" y2="600" stroke="#e5e7eb"/>
+<text x="90.00" y="624" text-anchor="middle" class="axis">100</text>
+<line x1="286.00" y1="80" x2="286.00" y2="600" stroke="#e5e7eb"/>
+<text x="286.00" y="624" text-anchor="middle" class="axis">2080</text>
+<line x1="482.00" y1="80" x2="482.00" y2="600" stroke="#e5e7eb"/>
+<text x="482.00" y="624" text-anchor="middle" class="axis">4060</text>
+<line x1="678.00" y1="80" x2="678.00" y2="600" stroke="#e5e7eb"/>
+<text x="678.00" y="624" text-anchor="middle" class="axis">6040</text>
+<line x1="874.00" y1="80" x2="874.00" y2="600" stroke="#e5e7eb"/>
+<text x="874.00" y="624" text-anchor="middle" class="axis">8020</text>
+<line x1="1070.00" y1="80" x2="1070.00" y2="600" stroke="#e5e7eb"/>
+<text x="1070.00" y="624" text-anchor="middle" class="axis">10000</text>
+<line x1="90" y1="600.00" x2="1070" y2="600.00" stroke="#e5e7eb"/>
+<text x="78" y="604.00" text-anchor="end" class="axis">0.5812</text>
+<line x1="90" y1="496.00" x2="1070" y2="496.00" stroke="#e5e7eb"/>
+<text x="78" y="500.00" text-anchor="end" class="axis">1.126</text>
+<line x1="90" y1="392.00" x2="1070" y2="392.00" stroke="#e5e7eb"/>
+<text x="78" y="396.00" text-anchor="end" class="axis">1.671</text>
+<line x1="90" y1="288.00" x2="1070" y2="288.00" stroke="#e5e7eb"/>
+<text x="78" y="292.00" text-anchor="end" class="axis">2.215</text>
+<line x1="90" y1="184.00" x2="1070" y2="184.00" stroke="#e5e7eb"/>
+<text x="78" y="188.00" text-anchor="end" class="axis">2.76</text>
+<line x1="90" y1="80.00" x2="1070" y2="80.00" stroke="#e5e7eb"/>
+<text x="78" y="84.00" text-anchor="end" class="axis">3.305</text>
+<text x="580.00" y="692" text-anchor="middle" class="axis">Training Step</text>
+<text x="24" y="340.00" text-anchor="middle" class="axis" transform="rotate(-90 24 340.00)">Grad Norm</text>
+<polyline fill="none" stroke="#7c3aed" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="90.00,115.86 99.90,225.26 109.80,245.11 119.70,236.33 129.60,290.74 139.49,286.16 149.39,328.16 159.29,323.96 169.19,352.79 179.09,349.35 179.09,336.18 179.09,378.37 179.09,397.85 179.09,375.13 278.08,378.37 278.08,397.28 278.08,409.88 278.08,407.20 278.08,435.08 278.08,431.83 278.08,402.43 278.08,440.42 278.08,390.98 278.08,449.78 278.08,451.31 377.07,426.10 377.07,423.81 377.07,434.50 377.07,446.72 377.07,449.78 377.07,447.11 377.07,476.32 377.07,470.02 377.07,463.14 476.06,474.98 476.06,475.74 476.06,451.31 476.06,474.41 476.06,481.85 476.06,461.81 476.06,496.74 476.06,491.97 476.06,495.60 476.06,489.30 476.06,517.17 575.05,488.92 575.05,510.87 575.05,488.92 575.05,508.58 575.05,515.07 575.05,514.31 575.05,512.40 575.05,513.74 575.05,516.22 674.04,516.79 674.04,530.35 674.04,504.76 674.04,534.93 674.04,533.40 674.04,524.81 674.04,515.07 674.04,526.72 674.04,511.25 674.04,534.16 674.04,533.40 773.03,537.98 773.03,535.69 773.03,536.84 773.03,541.80 773.03,545.43 773.03,546.00 773.03,545.43 773.03,550.01 773.03,534.55 872.02,550.20 872.02,542.56 872.02,540.46 872.02,559.17 872.02,538.36 872.02,536.45 872.02,542.76 872.02,554.78 872.02,558.03 872.02,556.12 872.02,553.26 971.01,553.45 971.01,551.54 971.01,562.23 971.01,544.28 971.01,544.47 971.01,551.54 971.01,550.01 971.01,553.83 971.01,558.22 1070.00,557.84 1070.00,551.35 1070.00,551.16 1070.00,564.14 1070.00,546.76 1070.00,550.58"/>
+<rect x="90" y="46" width="18" height="8" fill="#7c3aed"/>
+<text x="116" y="54" class="legend">grad_norm</text>
+<text x="90" y="712" class="small">log=hanoi_smolvla_v1_full_train.log</text>
+</svg>

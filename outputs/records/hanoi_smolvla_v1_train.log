@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/liuwenjie/lerobot/src/lerobot/scripts/lerobot_train.py", line 536, in <module>
+    main()
+  File "/home/liuwenjie/lerobot/src/lerobot/scripts/lerobot_train.py", line 532, in main
+    train()
+  File "/home/liuwenjie/lerobot/src/lerobot/configs/parser.py", line 233, in wrapper_inner
+    response = fn(cfg, *args, **kwargs)
+  File "/home/liuwenjie/lerobot/src/lerobot/scripts/lerobot_train.py", line 168, in train
+    cfg.validate()
+  File "/home/liuwenjie/lerobot/src/lerobot/configs/train.py", line 120, in validate
+    raise FileExistsError(
+FileExistsError: Output directory /home/liuwenjie/lerobot/biyesheji/biyesheji/outputs/train/hanoi_smolvla_v1 already exists and resume is False. Please change your output directory so that /home/liuwenjie/lerobot/biyesheji/biyesheji/outputs/train/hanoi_smolvla_v1 is not overwritten.

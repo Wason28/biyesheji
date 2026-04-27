@@ -1,0 +1,46 @@
+{
+  "dataset_num_frames": 33801,
+  "dataset_num_episodes": 90,
+  "num_learnable_params": 99880992,
+  "num_total_params": 450046176,
+  "end_of_training": true,
+  "started_at": "2026-04-27 02:09:06",
+  "ended_at": "2026-04-27 02:47:18",
+  "final_step": 10000,
+  "final_loss": 0.042,
+  "final_grad_norm": 0.84,
+  "final_lr": 2.5e-06,
+  "mean_update_s": 0.22711000000000003,
+  "mean_data_s": 0.00201,
+  "best_loss": 0.038,
+  "max_grad_norm": 3.117,
+  "checkpoint_steps": [
+    1000,
+    2000,
+    3000,
+    4000,
+    5000,
+    6000,
+    7000,
+    8000,
+    9000,
+    10000
+  ],
+  "dataset_action_mean": {
+    "shoulder_pan": -4.836291627125204,
+    "shoulder_lift": -24.1100250529642,
+    "elbow_flex": 26.446336649976566,
+    "wrist_flex": 87.04750506844957,
+    "wrist_roll": -92.98078942608544,
+    "gripper": 35.48567678268088
+  },
+  "dataset_action_std": {
+    "shoulder_pan": 14.380397867212947,
+    "shoulder_lift": 59.28003019343945,
+    "elbow_flex": 39.66870521597757,
+    "wrist_flex": 12.036576072950963,
+    "wrist_roll": 9.2108925997401,
+    "gripper": 29.025009743846578
+  },
+  "generated_at": "2026-04-27T02:55:48.491294"
+}

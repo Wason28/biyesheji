@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+<style>
+.title { font: 700 22px sans-serif; fill: #1f2937; }
+.axis { font: 12px sans-serif; fill: #4b5563; }
+.legend { font: 13px sans-serif; fill: #374151; }
+.small { font: 11px sans-serif; fill: #6b7280; }
+</style>
+<rect x="0" y="0" width="1200" height="720" fill="#ffffff"/>
+<text x="90" y="42" class="title">SmolVLA Training Loss vs Step</text>
+<rect x="90" y="80" width="980" height="520" fill="#f8fafc" stroke="#cbd5e1"/>
+<line x1="90.00" y1="80" x2="90.00" y2="600" stroke="#e5e7eb"/>
+<text x="90.00" y="624" text-anchor="middle" class="axis">100</text>
+<line x1="286.00" y1="80" x2="286.00" y2="600" stroke="#e5e7eb"/>
+<text x="286.00" y="624" text-anchor="middle" class="axis">2080</text>
+<line x1="482.00" y1="80" x2="482.00" y2="600" stroke="#e5e7eb"/>
+<text x="482.00" y="624" text-anchor="middle" class="axis">4060</text>
+<line x1="678.00" y1="80" x2="678.00" y2="600" stroke="#e5e7eb"/>
+<text x="678.00" y="624" text-anchor="middle" class="axis">6040</text>
+<line x1="874.00" y1="80" x2="874.00" y2="600" stroke="#e5e7eb"/>
+<text x="874.00" y="624" text-anchor="middle" class="axis">8020</text>
+<line x1="1070.00" y1="80" x2="1070.00" y2="600" stroke="#e5e7eb"/>
+<text x="1070.00" y="624" text-anchor="middle" class="axis">10000</text>
+<line x1="90" y1="600.00" x2="1070" y2="600.00" stroke="#e5e7eb"/>
+<text x="78" y="604.00" text-anchor="end" class="axis">0.03048</text>
+<line x1="90" y1="496.00" x2="1070" y2="496.00" stroke="#e5e7eb"/>
+<text x="78" y="500.00" text-anchor="end" class="axis">0.05229</text>
+<line x1="90" y1="392.00" x2="1070" y2="392.00" stroke="#e5e7eb"/>
+<text x="78" y="396.00" text-anchor="end" class="axis">0.0741</text>
+<line x1="90" y1="288.00" x2="1070" y2="288.00" stroke="#e5e7eb"/>
+<text x="78" y="292.00" text-anchor="end" class="axis">0.0959</text>
+<line x1="90" y1="184.00" x2="1070" y2="184.00" stroke="#e5e7eb"/>
+<text x="78" y="188.00" text-anchor="end" class="axis">0.1177</text>
+<line x1="90" y1="80.00" x2="1070" y2="80.00" stroke="#e5e7eb"/>
+<text x="78" y="84.00" text-anchor="end" class="axis">0.1395</text>
+<text x="580.00" y="692" text-anchor="middle" class="axis">Training Step</text>
+<text x="24" y="340.00" text-anchor="middle" class="axis" transform="rotate(-90 24 340.00)">Loss</text>
+<polyline fill="none" stroke="#dc2626" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="90.00,182.63 99.90,268.47 109.80,201.70 119.70,115.86 129.60,149.24 139.49,149.24 149.39,154.01 159.29,192.16 169.19,225.55 179.09,211.24 179.09,154.01 179.09,239.85 179.09,306.62 179.09,220.78 278.08,273.24 278.08,306.62 278.08,282.77 278.08,306.62 278.08,344.77 278.08,363.84 278.08,278.00 278.08,373.38 278.08,292.31 278.08,387.69 278.08,368.61 377.07,344.77 377.07,340.00 377.07,344.77 377.07,378.15 377.07,373.38 377.07,378.15 377.07,421.07 377.07,416.30 377.07,416.30 476.06,421.07 476.06,425.84 476.06,382.92 476.06,416.30 476.06,449.68 476.06,397.23 476.06,444.92 476.06,459.22 476.06,430.61 476.06,459.22 476.06,478.30 575.05,444.92 575.05,483.07 575.05,421.07 575.05,478.30 575.05,502.14 575.05,492.60 575.05,478.30 575.05,506.91 575.05,497.37 674.04,502.14 674.04,511.68 674.04,483.07 674.04,525.99 674.04,511.68 674.04,516.45 674.04,487.84 674.04,516.45 674.04,478.30 674.04,516.45 674.04,511.68 773.03,516.45 773.03,525.99 773.03,511.68 773.03,545.06 773.03,535.52 773.03,535.52 773.03,535.52 773.03,554.60 773.03,521.22 872.02,549.83 872.02,525.99 872.02,535.52 872.02,540.29 872.02,525.99 872.02,521.22 872.02,535.52 872.02,564.14 872.02,559.37 872.02,549.83 872.02,549.83 971.01,554.60 971.01,545.06 971.01,559.37 971.01,525.99 971.01,535.52 971.01,549.83 971.01,535.52 971.01,545.06 971.01,545.06 1070.00,559.37 1070.00,545.06 1070.00,540.29 1070.00,554.60 1070.00,535.52 1070.00,545.06"/>
+<rect x="90" y="46" width="18" height="8" fill="#dc2626"/>
+<text x="116" y="54" class="legend">loss</text>
+<text x="90" y="712" class="small">log=hanoi_smolvla_v1_full_train.log</text>
+</svg>
